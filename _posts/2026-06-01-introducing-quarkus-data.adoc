@@ -28,17 +28,19 @@ That's 16 results. Which one do you pick?
 
 == A brief history of Panache
 
-This situation, albeit a bit confusing, is functional to our users and serves a specific need: the need for repositories.
-When Panache was created, there was no standard repository pattern for Hibernate.
-Developers wanted a simple way to avoid writing repetitive data access code, so Panache provided the repository pattern — a single place to define queries for each entity, without boilerplate.
-Panache also offered an active record pattern for those who preferred it, though repositories turned out to be far more popular.
+This situation is admittedly confusing, but it didn't happen by accident. Every one of those extensions exists because it solves a real problem.
+To understand how we got here, we need to go back to the early days of Quarkus.
+
+Developers wanted a simple way to avoid writing repetitive data access code: define an entity, get basic CRUD operations, and declare queries in a single place without writing dozens of nearly identical query methods by hand.
+At the time, there was no standard repository pattern for Hibernate, so the Quarkus team created Panache to fill that gap.
+Panache provided a repository pattern, a single place to define queries for each entity, and also offered an active record pattern for those who preferred attaching persistence methods directly to their entities.
 
 == Introducing Jakarta Data
 
 In 2022, the Eclipse Foundation https://projects.eclipse.org/projects/ee4j.data/reviews/creation-review[approved the creation] of a new specification called https://jakarta.ee/specifications/data/[Jakarta Data], led by Otávio Santana.
 The goal was to standardize the repository pattern across both SQL and NoSQL databases, drawing inspiration from Spring Data, Apache DeltaSpike, Jakarta NoSQL, and Quarkus itself.
 
-Jakarta Data does not depend on or include Jakarta Persistence — it is a separate specification.
+Jakarta Data does not depend on or include Jakarta Persistence: it's a separate specification.
 Hibernate's implementation uses Hibernate under the covers, but Jakarta Data is https://jakarta.ee/learn/specification-guides/nosql-and-persistence-explained/[designed to work with any kind of database, relational or not].
 You declare a repository interface, and an annotation processor generates the implementation at compile time, including full type checking of queries and parameter bindings against your entity model.
 
@@ -50,13 +52,13 @@ Jakarta Data 1.1, currently in development, adds stateful operations (`@Persist`
 
 Having now Jakarta Data, most of the technology that Panache was implementing is standardized in a common specification, so it was natural for the Quarkus team to start supporting it.
 
-== Quarkus Data
+== Introducing Quarkus Data
 
 Quarkus Data is an umbrella project for data access in Quarkus.
 It groups all data access modules under a single name, making it easier to find documentation and understand how the pieces fit together.
 
 Under the Quarkus Data umbrella, there are specific modules for different backends.
-The first one is Quarkus Data Hibernate, for relational databases.
+The first one is **Quarkus Data Hibernate**, for relational databases.
 In the future, additional modules like Quarkus Data MongoDB could follow the same model for NoSQL databases.
 
 == Quarkus Data Hibernate
