@@ -1,0 +1,136 @@
+---
+layout: post
+title: 'Introducing Quarkus Data: One Gateway for Data Access'
+date: 2026-06-01
+tags: extension hibernate data panache
+synopsis: 'Quarkus Data unifies the data access experience for developers.'
+author: lmolteni
+---
+
+== The problem
+
+Having discussed current database access patterns in conferences, meetings and user feedback sessions, we know that Panache 1 is popular as a data access mechanism, but we discovered that there is some confusion on exactly what extension to use.
+Should a user that needs database access in a Quarkus application use the Hibernate extension, the Hibernate Reactive extension, Panache, or something else?
+Given that Hibernate is currently the most popular extension, since most applications will need persistence on the database, you might imagine that this confusion is creating a lot of friction.
+
+Try it yourself: create a Quarkus app with the CLI, then search for a database extension:
+
+[source,bash]
+----
+quarkus create app myapp
+cd myapp
+quarkus extension add jpa
+----
+
+image::TODO-extension-search-screenshot.png[Searching for JPA returns 16 extensions]
+
+That's 16 results. Which one do you pick?
+
+== A brief history of Panache
+
+This situation, albeit a bit confusing, is functional to our users and serves a specific need: the need for repositories.
+When Panache was created, there was no standard repository pattern for Hibernate.
+Developers wanted a simple way to avoid writing repetitive data access code, so Panache provided the repository pattern — a single place to define queries for each entity, without boilerplate.
+Panache also offered an active record pattern for those who preferred it, though repositories turned out to be far more popular.
+
+== Introducing Jakarta Data
+
+In 2022, the Eclipse Foundation https://projects.eclipse.org/projects/ee4j.data/reviews/creation-review[approved the creation] of a new specification called https://jakarta.ee/specifications/data/[Jakarta Data], led by Otávio Santana.
+The goal was to standardize the repository pattern across both SQL and NoSQL databases, drawing inspiration from Spring Data, Apache DeltaSpike, Jakarta NoSQL, and Quarkus itself.
+
+Jakarta Data does not depend on or include Jakarta Persistence — it is a separate specification.
+Hibernate's implementation uses Hibernate under the covers, but Jakarta Data is https://jakarta.ee/learn/specification-guides/nosql-and-persistence-explained/[designed to work with any kind of database, relational or not].
+You declare a repository interface, and an annotation processor generates the implementation at compile time, including full type checking of queries and parameter bindings against your entity model.
+
+Gavin King, the creator of Hibernate, was https://www.youtube.com/watch?v=Qr7R2pLnBDM[initially skeptical] of repositories — his argument being that the `EntityManager` already serves as a generic repository, and wrapping it in another layer only takes you further from the database.
+What changed his mind was annotation processing: for the first time, repository methods could be validated at compile time, catching bugs as you type rather than at runtime.
+
+https://jakarta.ee/specifications/data/1.0/[Jakarta Data 1.0] shipped in 2024 as part of Jakarta EE 11 with stateless repositories — explicit insert, update, delete operations with no persistence context, backed by Hibernate's `StatelessSession`.
+Jakarta Data 1.1, currently in development, adds stateful operations (`@Persist`, `@Merge`, `@Remove`) for developers who want persistence context semantics.
+
+Having now Jakarta Data, most of the technology that Panache was implementing is standardized in a common specification, so it was natural for the Quarkus team to start supporting it.
+
+== Quarkus Data
+
+Quarkus Data is an umbrella project for data access in Quarkus.
+It groups all data access modules under a single name, making it easier to find documentation and understand how the pieces fit together.
+
+Under the Quarkus Data umbrella, there are specific modules for different backends.
+The first one is Quarkus Data Hibernate, for relational databases.
+In the future, additional modules like Quarkus Data MongoDB could follow the same model for NoSQL databases.
+
+== Quarkus Data Hibernate
+
+Quarkus Data Hibernate is the entry point for relational database access in Quarkus.
+If you need to talk to a database, this is the one extension you add:
+
+[source,bash]
+----
+quarkus extension add quarkus-data-hibernate
+----
+
+Or in your `pom.xml`:
+
+[source,xml]
+----
+<dependency>
+    <groupId>io.quarkus</groupId>
+    <artifactId>quarkus-data-hibernate</artifactId>
+</dependency>
+----
+
+Let's walk through what it offers, in order of complexity.
+
+=== Plain SQL without entities
+
+The simplest thing you can do is write SQL queries directly, without defining any entity:
+
+[source,java]
+----
+TODO: example of simple SQL query without entities
+----
+
+=== Stateless session with an entity and Jakarta Data repositories
+
+As your application grows, you will want to define entities for type-safe access to your data.
+With a Jakarta Data repository, you declare an interface with `@Find` and `@Query` methods, and the annotation processor generates the implementation at compile time — including validation of your queries against the entity model:
+
+[source,java]
+----
+TODO: example with entity and stateless Jakarta Data repository (@Find, @Query)
+----
+
+=== Managed session with a persistence context
+
+When you understand the details of dealing with a managed session and want to exploit all the advantages it gives you — lazy loading, batch inserting, automatic dirty checking, first-level cache — you can use a managed session instead:
+
+[source,java]
+----
+TODO: example with entity and managed repository
+----
+
+=== Reactive
+
+When you need to integrate with other reactive APIs using `Uni` or `Multi`, the same entity can be used with a reactive driver:
+
+[source,java]
+----
+TODO: example with reactive repository
+----
+
+== What about Panache 1?
+
+Panache 1 is not going away.
+It will remain available as an extension for existing applications, and we have no plans to remove it.
+
+That said, Quarkus Data Hibernate is where all new development and investment is happening.
+We are working on migration tooling to help existing Panache 1 users transition when they are ready, and we will share more details as that work progresses.
+
+We are also revamping the documentation to be more opinionated and guide users toward a clear path, and improving test coverage so that generated projects include working tests out of the box.
+
+== Try it today
+
+You can try Quarkus Data Hibernate today on the Quarkus `main` branch.
+It will ship in Quarkus 4.0.
+
+Give it a try and let us know what you think — feedback is welcome on https://quarkusio.zulipchat.com/#narrow/channel/187038-dev/topic/WG.20-.20Panache.2ENext[Zulip] or via https://github.com/quarkusio/quarkus/issues[GitHub issues].
