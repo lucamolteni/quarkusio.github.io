@@ -6,12 +6,13 @@ tags: extension hibernate data panache
 synopsis: 'Quarkus Data unifies the data access experience for developers.'
 author: lmolteni
 ---
+:imagesdir: /assets/images/posts/introducing-quarkus-data
 
 == The problem
 
 Having discussed current database access patterns in conferences, meetings and user feedback sessions, we know that Panache 1 is popular as a data access mechanism, but we discovered that there is some confusion on exactly what extension to use.
 Should a user that needs database access in a Quarkus application use the Hibernate extension, the Hibernate Reactive extension, Panache, or something else?
-Given that Hibernate is currently the most popular extension, since most applications will need persistence on the database, you might imagine that this confusion is creating a lot of friction.
+Given that Hibernate is currently the most popular extension in Quarkus (as most applications will need persistence on the database) you might imagine that this confusion is creating some of friction.
 
 Try it yourself: create a Quarkus app with the CLI, then search for a database extension:
 
@@ -22,9 +23,14 @@ cd myapp
 quarkus extension add jpa
 ----
 
-image::TODO-extension-search-screenshot.png[Searching for JPA returns 16 extensions]
+image::extension-search-jpa.png[Searching for JPA returns 16 extensions]
 
-That's 16 results. Which one do you pick?
+That's a lot of results. Some of them are not obviously related but the ones on top are seriously misleading.
+And if you try searching for "database" instead, it's even worse:
+
+image::extension-search-database.png[Searching for database returns even more extensions]
+
+Which one do you pick?
 
 == A brief history of Panache
 
@@ -32,6 +38,7 @@ This situation is admittedly confusing, but it didn't happen by accident. Every 
 To understand how we got here, we need to go back to the early days of Quarkus.
 
 Developers wanted a simple way to avoid writing repetitive data access code: define an entity, get basic CRUD operations, and declare queries in a single place without writing dozens of nearly identical query methods by hand.
+Also, users love the idea of the "repository class", a class that will hold such queries and some helpers to avoid writing code.
 At the time, there was no standard repository pattern for Hibernate, so the Quarkus team created Panache to fill that gap.
 Panache provided a repository pattern, a single place to define queries for each entity, and also offered an active record pattern for those who preferred attaching persistence methods directly to their entities.
 
@@ -40,7 +47,7 @@ Panache provided a repository pattern, a single place to define queries for each
 In 2022, the Eclipse Foundation https://projects.eclipse.org/projects/ee4j.data/reviews/creation-review[approved the creation] of a new specification called https://jakarta.ee/specifications/data/[Jakarta Data], led by Otávio Santana.
 The goal was to standardize the repository pattern across both SQL and NoSQL databases, drawing inspiration from Spring Data, Apache DeltaSpike, Jakarta NoSQL, and Quarkus itself.
 
-Jakarta Data does not depend on or include Jakarta Persistence: it's a separate specification.
+Jakarta Data does not depend on or include Jakarta Persistence, the "old" specification which is very common in Jakarta EE (formerly known as Java EE) scenarios: it's a separate specification.
 Hibernate's implementation uses Hibernate under the covers, but Jakarta Data is https://jakarta.ee/learn/specification-guides/nosql-and-persistence-explained/[designed to work with any kind of database, relational or not].
 You declare a repository interface, and an annotation processor generates the implementation at compile time, including full type checking of queries and parameter bindings against your entity model.
 
