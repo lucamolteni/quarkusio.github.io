@@ -88,29 +88,76 @@ Or in your `pom.xml`:
 </dependency>
 ----
 
+Currently, the Hibernate annotation processor needs to be configured explicitly in your build.
+We plan to make this automatic, but for now add the following to your `maven-compiler-plugin` configuration:
+
+[source,xml]
+----
+<plugin>
+    <artifactId>maven-compiler-plugin</artifactId>
+    <configuration>
+        <annotationProcessorPaths>
+            <path>
+                <groupId>org.hibernate.orm</groupId>
+                <artifactId>hibernate-processor</artifactId>
+            </path>
+        </annotationProcessorPaths>
+    </configuration>
+</plugin>
+----
+
 Let's walk through what it offers, in order of complexity.
 
 === Plain SQL without entities
 
-The simplest thing you can do is write SQL queries directly, without defining any entity:
+The simplest thing you can do is write native SQL queries directly, without defining any entity.
+Inject a `StatelessSession` and use `createNativeQuery`, mapping results to a Java record:
 
 [source,java]
 ----
-TODO: example of simple SQL query without entities
+@Path("/db")
+public class DatabaseResource {
+    @Inject
+    StatelessSession session;
+
+    record ConnectionInfo(int pid, String usename, String application_name, String state) {}
+
+    @GET
+    @Path("/connections")
+    public List<ConnectionInfo> connections() {
+        return session.createNativeQuery(
+            "SELECT pid, usename, application_name, state FROM pg_stat_activity WHERE datname = current_database()",
+            ConnectionInfo.class)
+            .getResultList();
+    }
+}
 ----
 
-These queries could be put inside a repository, in a similar to what other frameworks offer such as Spring Data JDBC
+If SQL is enough for you, this is a perfectly valid example of `quarkus-data-hibernate`.
+Inlining the queries inside the endpoints can be enough for very simple example, but it becomes harder to create abstractions.
+We can then put these queries inside a repository, similar to what you can do in other frameworks such as Spring Data JDBC.
+Using Hibernate's `@SQL` annotation, the annotation processor generates the implementation at compile time:
 
 [source,java]
 ----
-TODO: example of simple SQL query inside a repository
+@Repository
+public interface DatabaseInfo {
+
+    @SQL("SELECT pid, usename, application_name, state FROM pg_stat_activity WHERE datname = current_database()")
+    List<ConnectionInfo> activeConnections();
+}
 ----
 
-With a Jakarta Data repository, you declare an interface with `@Find` and `@Query` methods, and the annotation processor generates the implementation at compile time — including validation of your queries against the entity model:
+Working with raw SQL is a perfectly valid approach for production use.
+Hibernate executes these queries as prepared statements, and `StatelessSession` supports JDBC batching for insert, update, and delete operations.
+Connection pooling and session lifecycle are managed by the container, and transactions work with `@Transactional` as expected.
+However, native SQL queries are not validated at compile time: correctness should be verified with integration tests.
+For better type safety, you can define entities and let the annotation processor validate your queries against the entity model.
 
 === Stateless session with an entity and Jakarta Data repositories
 
-As your application grows, you will want to define entities for type-safe access to your data.
+Entity mapping opens a whole new world of features, and it enables the true power of Hibernate.
+I won't state every feature Hibernate provides as there are plenty of materials everywhere, but let's focus on correctness and how much easier it is to check, which is particularly useful to have a fast feedback loop, for humans and AI agents.
 
 
 [source,java]
