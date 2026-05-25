@@ -136,7 +136,8 @@ public class DatabaseResource {
 If SQL is enough for you, this is a perfectly valid example of `quarkus-data-hibernate`.
 Inlining the queries inside the endpoints can be enough for very simple example, but it becomes harder to create abstractions.
 We can then put these queries inside a repository, similar to what you can do in other frameworks such as Spring Data JDBC.
-Using Hibernate's `@SQL` annotation, the annotation processor generates the implementation at compile time:
+Using Hibernate's `@SQL` annotation, the annotation processor generates the implementation at compile time.
+A standard `@NativeQuery` annotation is being added to Jakarta Persistence (https://github.com/jakartaee/persistence/issues/991[jakartaee/persistence#991], https://github.com/jakartaee/persistence/pull/992[jakartaee/persistence#992]) and will be usable as an alternative to `@SQL` in a future release:
 
 [source,java]
 ----
@@ -152,22 +153,62 @@ Working with raw SQL is a perfectly valid approach for production use.
 Hibernate executes these queries as prepared statements, and `StatelessSession` supports JDBC batching for insert, update, and delete operations.
 Connection pooling and session lifecycle are managed by the container, and transactions work with `@Transactional` as expected.
 However, native SQL queries are not validated at compile time: correctness should be verified with integration tests.
-For better type safety, you can define entities and let the annotation processor validate your queries against the entity model.
+When you're ready for a better developer experience, you can define entities and leverage the full power of the annotation processor.
 
 === Stateless session with an entity and Jakarta Data repositories
 
 Entity mapping opens a whole new world of features, and it enables the true power of Hibernate.
 I won't state every feature Hibernate provides as there are plenty of materials everywhere, but let's focus on correctness and how much easier it is to check, which is particularly useful to have a fast feedback loop, for humans and AI agents.
 
+Let's map our business logic using classes.
+We're making an online physical book store, so we'll have books, users and orders.
+By defining entity classes, we don't need to generate the schema manually — we can trust Quarkus and Hibernate to create the proper tables and focus on the business logic instead.
 
 [source,java]
 ----
-TODO: example with entity and stateless Jakarta Data repository (@Find, @Query)
+@Entity
+public class Book {
+    @Id @GeneratedValue
+    public Long id;
+    public String title;
+    public String isbn;
+    public int price;
+}
+
+@Repository
+public interface BookRepository {
+
+    @Save
+    Book save(Book book);
+
+    @Find
+    Optional<Book> findByIsbn(String isbn);
+
+    @Find
+    List<Book> findByTitle(String title);
+
+    @Query("where price < :maxPrice order by title")
+    List<Book> cheaperThan(int maxPrice);
+}
 ----
+
+`@Find` methods derive the query from parameter names: `findByIsbn(String isbn)` matches the `isbn` field on `Book`.
+If you rename the parameter to something that doesn't match, say `findByIsbn(String i)`, the build fails:
+
+[source]
+----
+error: no matching field named 'i' in entity class 'org.acme.Book'
+----
+
+This is caught at compile time by the Hibernate annotation processor, not at application startup.
+Other frameworks https://github.com/spring-projects/spring-data-jpa/issues/1690[traditionally validate queries at startup], which means you only discover mistakes when the application boots, or worse, in production.
+
+The annotation processor also generates readable source code.
+You can open `BookRepository_.java` in `target/generated-sources/annotations/` and see the exact queries that will be executed, making debugging straightforward.
 
 === Managed session with a persistence context
 
-When you understand the details of dealing with a managed session and want to exploit all the advantages it gives you — lazy loading, batch inserting, automatic dirty checking, first-level cache — you can use a managed session instead:
+When you understand the details of dealing with a managed session and want to exploit all the advantages it gives you (lazy loading, batch inserting, automatic dirty checking, first-level cache) you can use a managed session instead:
 
 [source,java]
 ----
@@ -198,4 +239,4 @@ We are also revamping the documentation to be more opinionated and guide users t
 You can try Quarkus Data Hibernate today on the Quarkus `main` branch.
 It will ship in Quarkus 4.0.
 
-Give it a try and let us know what you think — feedback is welcome on https://quarkusio.zulipchat.com/#narrow/channel/187038-dev/topic/WG.20-.20Panache.2ENext[Zulip] or via https://github.com/quarkusio/quarkus/issues[GitHub issues].
+Give it a try and let us know what you think. Feedback is welcome on https://quarkusio.zulipchat.com/#narrow/channel/187038-dev/topic/WG.20-.20Panache.2ENext[Zulip] or via https://github.com/quarkusio/quarkus/issues[GitHub issues].
