@@ -99,10 +99,19 @@ The simplest thing you can do is write SQL queries directly, without defining an
 TODO: example of simple SQL query without entities
 ----
 
+These queries could be put inside a repository, in a similar to what other frameworks offer such as Spring Data JDBC
+
+[source,java]
+----
+TODO: example of simple SQL query inside a repository
+----
+
+With a Jakarta Data repository, you declare an interface with `@Find` and `@Query` methods, and the annotation processor generates the implementation at compile time — including validation of your queries against the entity model:
+
 === Stateless session with an entity and Jakarta Data repositories
 
 As your application grows, you will want to define entities for type-safe access to your data.
-With a Jakarta Data repository, you declare an interface with `@Find` and `@Query` methods, and the annotation processor generates the implementation at compile time — including validation of your queries against the entity model:
+
 
 [source,java]
 ----
