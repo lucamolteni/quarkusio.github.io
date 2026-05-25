@@ -10,7 +10,11 @@ author: lmolteni
 
 == The problem
 
-Having discussed current database access patterns in conferences, meetings and user feedback sessions, we know that Panache 1 is popular as a data access mechanism, but we discovered that there is some confusion on exactly what extension to use.
+Having discussed current database access patterns in conferences, meetings and user feedback sessions, we know that the current implementation of Panache, which we'll call Panache 1 in this blog post, is popular as a data access mechanism, albeit the naming is not as popular as we wanted.
+You might have read https://quarkus.io/blog/hibernate-panache-next/[this blog post] that talks about Panache Next, the new version of Panache that we're currently developing.
+This blog post is about its natural evolution.
+
+Despite Panache 1's popularity, we discovered that there is some confusion on exactly what extension to use.
 Should a user that needs database access in a Quarkus application use the Hibernate extension, the Hibernate Reactive extension, Panache, or something else?
 Given that Hibernate is currently the most popular extension in Quarkus (as most applications will need persistence on the database) you might imagine that this confusion is creating some of friction.
 
@@ -63,6 +67,14 @@ Having now Jakarta Data, most of the technology that Panache was implementing is
 
 Quarkus Data is an umbrella project for data access in Quarkus.
 It groups all data access modules under a single name, making it easier to find documentation and understand how the pieces fit together.
+
+[NOTE]
+.Why "Quarkus Data" and not "Panache 2"?
+====
+The Panache name never quite caught on with users, and it could have misled them into thinking this was a new improved implementation of Hibernate, which it definitely is not.
+We chose "Data" because the project is built on Jakarta Data, and it incidentally helps users migrating from Spring as they're already used to the "Data" naming.
+It's also an opportunity to create an umbrella that covers both SQL and NoSQL under the same name.
+====
 
 Under the Quarkus Data umbrella, there are specific modules for different backends.
 The first one is **Quarkus Data Hibernate**, for relational databases.
