@@ -274,13 +274,51 @@ public class BookResource {
 }
 ----
 
+If you've used Hibernate before, you might notice that this example doesn't inject any session or entity manager.
+That's intentional: Jakarta Data repositories use Hibernate's `StatelessSession` under the covers, the same one we injected explicitly in the <<Simple SQL query,first example>>.
+A stateless session gives you the entity model (type-safe queries, parameter binding, schema validation) without a persistence context.
+Every operation is immediate, so you don't need to think about entity lifecycle states.
+
 === Managed session with a persistence context
 
-In the previous example we used a repository pattern with Quarkus Data Hibernate managed entities, and we When you understand the details of dealing with a managed session and want to exploit all the advantages it gives you (lazy loading, batch inserting, automatic dirty checking, first-level cache) you can use a managed session instead:
+If on the other hand you want Hibernate to handle the full entity lifecycle, `quarkus-data-hibernate` also gives you Jakarta Persistence and the managed `Session`.
+This is where you get lazy loading, automatic dirty checking, batch inserts, and the first-level cache.
+
+Let's add an author to our bookstore:
 
 [source,java]
 ----
-TODO: example with entity and managed repository
+@Entity
+public class Author {
+    @Id @GeneratedValue
+    public Long id;
+    public String name;
+}
+----
+
+And link it to `Book`:
+
+[source,java]
+----
+@ManyToOne
+public Author author;
+----
+
+With a managed session, you can load a book, change its author, and Hibernate will detect the change and flush it to the database at transaction commit without an explicit save call:
+
+[source,java]
+----
+@Inject
+Session session;
+
+@PUT
+@Path("/{id}/author")
+@Transactional
+public Book setAuthor(@PathParam("id") Long bookId, @QueryParam("authorId") Long authorId) {
+    Book book = session.find(Book.class, bookId);
+    book.author = session.find(Author.class, authorId);
+    return book;
+}
 ----
 
 === Reactive
