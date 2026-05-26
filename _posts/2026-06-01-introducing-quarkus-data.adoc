@@ -8,12 +8,9 @@ author: lmolteni
 ---
 :imagesdir: /assets/images/posts/introducing-quarkus-data
 
-== The problem
+== Quarkus Data: One Gateway for Data Access
 
 Having discussed current database access patterns in conferences, meetings and user feedback sessions, we know that the current implementation of Panache, which we'll call Panache 1 in this blog post, is popular as a data access mechanism, albeit the naming is not as popular as we wanted.
-You might have read https://quarkus.io/blog/hibernate-panache-next/[this blog post] that talks about Panache Next, the new version of Panache that we're currently developing.
-This blog post is about its natural evolution.
-
 Despite Panache 1's popularity, we discovered that there is some confusion on exactly what extension to use.
 Should a user that needs database access in a Quarkus application use the Hibernate extension, the Hibernate Reactive extension, Panache, or something else?
 Given that Hibernate is currently the most popular extension in Quarkus (as most applications will need persistence on the database) you might imagine that this confusion is creating some of friction.
@@ -36,12 +33,15 @@ image::extension-search-database.png[Searching for database returns even more ex
 
 Which one do you pick?
 
+You might have read https://quarkus.io/blog/hibernate-panache-next/[this blog post] that talks about Panache Next, the new version of Panache that we're currently developing.
+This blog post is about its natural evolution.
+
 == A brief history of Panache
 
 This situation is admittedly confusing, but it didn't happen by accident. Every one of those extensions exists because it solves a real problem.
 To understand how we got here, we need to go back to the early days of Quarkus.
 
-Developers wanted a simple way to avoid writing repetitive data access code: define an entity, get basic CRUD operations, and declare queries in a single place without writing dozens of nearly identical query methods by hand.
+Developers wanted a simple way to avoid writing repetitive data access code: define an entity, get basic CRUD operations, and declare queries in a single place without writing similar query methods by hand.
 Also, users love the idea of the "repository class", a class that will hold such queries and some helpers to avoid writing code.
 At the time, there was no standard repository pattern for Hibernate, so the Quarkus team created Panache to fill that gap.
 Panache provided a repository pattern, a single place to define queries for each entity, and also offered an active record pattern for those who preferred attaching persistence methods directly to their entities.
