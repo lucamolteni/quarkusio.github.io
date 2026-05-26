@@ -167,14 +167,14 @@ Connection pooling and session lifecycle are managed by the container, and trans
 However, native SQL queries are not validated at compile time: correctness should be verified with integration tests.
 When you're ready for a better developer experience, you can define entities and leverage the full power of the annotation processor.
 
-=== Stateless session with an entity and Jakarta Data repositories
+=== Introducing Entity Mapping and Repositories
 
 Entity mapping opens a whole new world of features, and it enables the true power of Hibernate.
 I won't state every feature Hibernate provides as there are plenty of materials everywhere, but let's focus on correctness and how much easier it is to check, which is particularly useful to have a fast feedback loop, for humans and AI agents.
 
 Let's map our business logic using classes.
 We're making an online physical book store, so we'll have books, users and orders.
-By defining entity classes, we don't need to generate the schema manually — we can trust Quarkus and Hibernate to create the proper tables and focus on the business logic instead.
+By defining entity classes, we don't need to generate the schema manually: we can trust Quarkus and Hibernate to create the proper tables and focus on the business logic instead.
 
 [source,java]
 ----
@@ -214,6 +214,16 @@ error: no matching field named 'i' in entity class 'org.acme.Book'
 
 This is caught at compile time by the Hibernate annotation processor, not at application startup.
 Other frameworks https://github.com/spring-projects/spring-data-jpa/issues/1690[traditionally validate queries at startup], which means you only discover mistakes when the application boots, or worse, in production.
+
+[NOTE]
+====
+To validate fields at compile time, Quarkus Data Hibernate needs to know the model of your tables: how they are structured and what fields they contain.
+This is what the entity class provides.
+Spring's `JdbcTemplate` infers the query from the name of the method, which is brittle and can lead to errors at runtime.
+Entity mapping can use very complex features, but it's also perfectly fine to define a simple entity class just for query mapping purposes.
+The same table can even be mapped by different classes for different query needs.
+Either way, it's a good starting point for building a full entity model when you need one.
+====
 
 The annotation processor also generates readable source code.
 You can open `BookRepository_.java` in `target/generated-sources/annotations/` and see the exact queries that will be executed, making debugging straightforward.
