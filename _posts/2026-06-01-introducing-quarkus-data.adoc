@@ -378,6 +378,44 @@ public Book createWithAuthor(String title, String isbn, int price, String author
 
 Because `Book.author` is a managed association, Hibernate persists the author automatically when you persist the book.
 
+TODO => I'm not sure whether to include this as the output is very similar to injecting the session
+
+With https://jakarta.ee/specifications/data/1.1/[Jakarta Data 1.1], you will be able to do the same thing inside a repository using `@Persist` instead of `@Save`.
+`@Persist` makes the repository stateful, backed by a persistence context instead of a `StatelessSession`:
+
+[source,java]
+----
+@Repository
+public interface BookRepository {
+
+    @Persist
+    Book persist(Book book);
+}
+----
+
+The endpoint then becomes identical to the managed `Session` version, but using the repository:
+
+[source,java]
+----
+@Inject
+BookRepository books;
+
+@POST
+@Path("/with-author")
+@Transactional
+public Book createWithAuthor(String title, String isbn, int price, String authorName) {
+    Author author = new Author();
+    author.name = authorName;
+
+    Book book = new Book();
+    book.title = title;
+    book.isbn = isbn;
+    book.price = price;
+    book.author = author;
+    return books.persist(book);
+}
+----
+
 === Reactive
 
 When you need to integrate with other reactive APIs using `Uni` or `Multi`, the same entity can be used with a reactive driver:
