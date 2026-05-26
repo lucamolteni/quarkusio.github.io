@@ -304,6 +304,23 @@ And link it to `Book`:
 public Author author;
 ----
 
+With a managed session, you can load a book, change its author, and Hibernate will detect the change and flush it to the database at transaction commit without an explicit save call:
+
+[source,java]
+----
+@Inject
+Session session;
+
+@PUT
+@Path("/{id}/author")
+@Transactional
+public Book setAuthor(Long bookId, Long authorId) {
+    Book book = session.find(Book.class, bookId);
+    book.author = session.find(Author.class, authorId);
+    return book;
+}
+----
+
 You can mix both styles in the same application: use repositories for standard CRUD and queries, and inject `Session` when you need managed operations.
 Since Jakarta Data repositories are backed by `StatelessSession`, operations that require a persistence context (lazy loading, cascading persists, dirty checking) need to happen outside the repository, in your service or resource class.
 
@@ -369,6 +386,11 @@ When you need to integrate with other reactive APIs using `Uni` or `Multi`, the 
 ----
 TODO: example with reactive repository
 ----
+
+
+=== Active Record
+
+Write it
 
 == What about Panache 1?
 
