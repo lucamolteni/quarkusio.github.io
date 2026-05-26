@@ -477,9 +477,64 @@ public class BookSuggestionService {
 
 The repository's `book(isbn)` returns a `Uni<Book>` that integrates directly into the reactive pipeline.
 
-=== Active Record
+=== Active record style
 
-Write it
+If you prefer to keep queries close to the entity rather than in a separate repository class, you can define the repository as a nested interface inside the entity itself.
+This is the same repository pattern with the same annotations; the only difference is where the interface lives:
+
+[source,java]
+----
+@Entity
+public class Book extends PanacheEntity {
+    public String title;
+    public String isbn;
+    public int price;
+
+    public interface Repo extends PanacheRepository<Book> {
+        @Find
+        Book findByIsbn(String isbn);
+
+        @Query("where price < :maxPrice order by title")
+        List<Book> cheaperThan(int maxPrice);
+    }
+}
+----
+
+Instance operations like `persist()` and `delete()` live directly on the entity, no injection needed:
+
+[source,java]
+----
+@POST
+@Transactional
+public Book create(Book book) {
+    // no repository injected, the entity persists itself
+    book.persist();
+    return book;
+}
+----
+
+For queries, you inject the nested repository:
+
+[source,java]
+----
+@Inject
+Book.Repo books;
+
+@GET
+@Path("/by-isbn/{isbn}")
+public Book byIsbn(@PathParam("isbn") String isbn) {
+    return books.findByIsbn(isbn);
+}
+----
+
+The same repository can also switch between managed and stateless sessions, or between blocking and reactive, at runtime.
+This is covered in more detail in the https://quarkus.io/blog/hibernate-panache-next/[Panache Next blog post].
+
+[NOTE]
+====
+The generated classes still use `Panache` naming (`PanacheEntity`, `PanacheRepository`) as these features were developed under the Panache Next project.
+This will be renamed to match the Quarkus Data naming in a future release.
+====
 
 == What about Panache 1?
 
