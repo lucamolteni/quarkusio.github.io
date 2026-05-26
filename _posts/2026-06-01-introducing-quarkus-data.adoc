@@ -416,15 +416,66 @@ public Book createWithAuthor(String title, String isbn, int price, String author
 }
 ----
 
-=== Reactive
+=== Hibernate Reactive
 
-When you need to integrate with other reactive APIs using `Uni` or `Multi`, the same entity can be used with a reactive driver:
+If you followed the <<Quarkus Data: One Gateway for Data Access,try it yourself>> step earlier, you may have seen Hibernate Reactive among the extensions and wondered whether you should use it.
+With Quarkus Data Hibernate, you don't need to worry about that choice upfront: you can add `quarkus-data-hibernate` and switch to reactive when you need it.
+Why you'd need Hibernate Reactive is outside the scope of this blog post, but here's a good example: when you need to interact with other reactive APIs, Hibernate Reactive provides a non-blocking API that composes naturally with them.
+As always, I suggest you try both, measure performance, and see what fits your needs.
+The same entity model you've already defined works unchanged with a reactive driver.
+
+To make a repository reactive, declare a `Mutiny.StatelessSession` accessor and wrap the return types in `Uni`.
+The session accessor is currently required so that the annotation processor knows to generate reactive code; we plan to make this automatic by inferring it from the `Uni` return types.
+
+^ TODO This is probably a bug and should be addressed elsewhere
 
 [source,java]
 ----
-TODO: example with reactive repository
+@Repository
+public interface ReactiveBookRepository {
+
+    Mutiny.StatelessSession session();
+
+    @Find
+    Uni<Book> book(String isbn);
+
+    @Find
+    Uni<List<Book>> booksByTitle(String title);
+
+    @Query("where price < :maxPrice order by title")
+    Uni<List<Book>> cheaperThan(int maxPrice);
+
+    @Save
+    Uni<Book> save(Book book);
+}
 ----
 
+Suppose our bookstore receives a stream of advertised books from a message queue, and we want to check which ones we don't already have in our catalog.
+Using Quarkus Messaging (which supports in-memory queues, so you can experiment without a broker) and the reactive repository, the entire pipeline stays non-blocking:
+
+[source,java]
+----
+@ApplicationScoped
+public class BookSuggestionService {
+
+    @Inject
+    ReactiveBookRepository books;
+
+    @Incoming("advertised-books")
+    @Outgoing("suggestions")
+    public Multi<String> suggestNewBooks(Multi<String> advertisedIsbns) {
+        return advertisedIsbns
+            .onItem().transformToUniAndMerge(isbn ->
+                books.book(isbn)
+                    .map(existing -> (String) null)
+                    .onFailure().recoverWithItem(isbn)
+            )
+            .select().whereNonNull();
+    }
+}
+----
+
+The repository's `book(isbn)` returns a `Uni<Book>` that integrates directly into the reactive pipeline.
 
 === Active Record
 
