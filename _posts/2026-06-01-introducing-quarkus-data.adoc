@@ -120,9 +120,9 @@ We plan to make this automatic, but for now add the following to your `maven-com
 
 Let's walk through what it offers, in order of complexity.
 
-=== Plain SQL without entities
+=== Simple SQL query
 
-The simplest thing you can do is write native SQL queries directly, without defining any entity.
+The simplest thing you can do to access your database is to write native SQL queries directly, without defining any entity.
 Inject a `StatelessSession` and use `createNativeQuery`, mapping results to a Java record:
 
 [source,java]
@@ -136,14 +136,24 @@ public class DatabaseResource {
 
     @GET
     @Path("/connections")
-    public List<ConnectionInfo> connections() {
-        return session.createNativeQuery(
-            "SELECT pid, usename, application_name, state FROM pg_stat_activity WHERE datname = current_database()",
-            ConnectionInfo.class)
+    public List<ConnectionInfo> connections(@QueryParam("state") String state) {
+        return session.createNativeQuery("""
+                SELECT pid, usename, application_name, state
+                FROM pg_stat_activity
+                WHERE datname = current_database()
+                  AND (state = :state OR CAST(:state AS TEXT) IS NULL)
+                """, ConnectionInfo.class)
+            .setParameter("state", state)
             .getResultList();
     }
 }
 ----
+
+[WARNING]
+====
+This example uses named parameters (`:state`) and `setParameter` to bind values safely.
+If you think it's a good idea to concatenate strings into your queries instead, please don't: it exposes your application to SQL injection attacks.
+====
 
 If SQL is enough for you, this is a perfectly valid example of `quarkus-data-hibernate`.
 Inlining the queries inside the endpoints can be enough for very simple example, but it becomes harder to create abstractions.
@@ -156,8 +166,14 @@ A standard `@NativeQuery` annotation is being added to Jakarta Persistence (http
 @Repository
 public interface DatabaseInfo {
 
-    @SQL("SELECT pid, usename, application_name, state FROM pg_stat_activity WHERE datname = current_database()")
-    List<ConnectionInfo> activeConnections();
+    @SQL("""
+        SELECT pid, usename, application_name, state
+        FROM pg_stat_activity
+        WHERE datname = current_database()
+          AND (state = :state OR CAST(:state AS TEXT) IS NULL)
+        """)
+    // @NativeQuery will be supported in Jakarta Persistence 4.0
+    List<ConnectionInfo> activeConnections(String state);
 }
 ----
 
