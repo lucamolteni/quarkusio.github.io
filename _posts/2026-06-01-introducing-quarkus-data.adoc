@@ -244,9 +244,39 @@ Either way, it's a good starting point for building a full entity model when you
 The annotation processor also generates readable source code.
 You can open `BookRepository_.java` in `target/generated-sources/annotations/` and see the exact queries that will be executed, making debugging straightforward.
 
+Here's a possible REST endpoint implementation that uses the repository:
+
+[source,java]
+----
+@Path("/books")
+public class BookResource {
+
+    @Inject
+    BookRepository books;
+
+    @POST
+    @Transactional
+    public Book create(Book book) {
+        return books.save(book);
+    }
+
+    @GET
+    @Path("/by-isbn/{isbn}")
+    public Optional<Book> byIsbn(@PathParam("isbn") String isbn) {
+        return books.findByIsbn(isbn);
+    }
+
+    @GET
+    @Path("/cheap")
+    public List<Book> cheap(@QueryParam("max") int maxPrice) {
+        return books.cheaperThan(maxPrice);
+    }
+}
+----
+
 === Managed session with a persistence context
 
-When you understand the details of dealing with a managed session and want to exploit all the advantages it gives you (lazy loading, batch inserting, automatic dirty checking, first-level cache) you can use a managed session instead:
+In the previous example we used a repository pattern with Quarkus Data Hibernate managed entities, and we When you understand the details of dealing with a managed session and want to exploit all the advantages it gives you (lazy loading, batch inserting, automatic dirty checking, first-level cache) you can use a managed session instead:
 
 [source,java]
 ----
