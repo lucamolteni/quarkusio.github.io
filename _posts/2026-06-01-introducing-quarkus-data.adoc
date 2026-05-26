@@ -11,7 +11,9 @@ author: lmolteni
 == Quarkus Data: One Gateway for Data Access
 
 Having discussed current database access patterns in conferences, meetings and user feedback sessions, we know that the current implementation of Panache, which we'll call Panache 1 in this blog post, is popular as a data access mechanism, albeit the naming is not as popular as we wanted.
-Despite Panache 1's popularity, we discovered that there is some confusion on exactly what extension to use.
+
+Despite Panache 1's popularity, we discovered that there is some confusion on exactly what Quarkus extension to use.
+
 Should a user that needs database access in a Quarkus application use the Hibernate extension, the Hibernate Reactive extension, Panache, or something else?
 Given that Hibernate is currently the most popular extension in Quarkus (as most applications will need persistence on the database) you might imagine that this confusion is creating some of friction.
 
@@ -47,6 +49,8 @@ At the time, there was no standard repository pattern for Hibernate, so the Quar
 Panache provided a repository pattern, a single place to define queries for each entity, and also offered an active record pattern for those who preferred attaching persistence methods directly to their entities.
 
 == Introducing Jakarta Data
+
+This needs review, it's too long
 
 In 2022, the Eclipse Foundation https://projects.eclipse.org/projects/ee4j.data/reviews/creation-review[approved the creation] of a new specification called https://jakarta.ee/specifications/data/[Jakarta Data], led by Otávio Santana.
 The goal was to standardize the repository pattern across both SQL and NoSQL databases, drawing inspiration from Spring Data, Apache DeltaSpike, Jakarta NoSQL, and Quarkus itself.
@@ -322,6 +326,9 @@ public Book setAuthor(Long bookId, Long authorId) {
 ----
 
 You can mix both styles in the same application: use repositories for standard CRUD and queries, and inject `Session` when you need managed operations.
+
+
+TODO this needs verification as Jakarta Data supports also Stateful
 Since Jakarta Data repositories are backed by `StatelessSession`, operations that require a persistence context (lazy loading, cascading persists, dirty checking) need to happen outside the repository, in your service or resource class.
 
 To see the difference, let's create a book with its author using the stateless repository.
@@ -420,6 +427,7 @@ public Book createWithAuthor(String title, String isbn, int price, String author
 
 If you followed the <<Quarkus Data: One Gateway for Data Access,try it yourself>> step earlier, you may have seen Hibernate Reactive among the extensions and wondered whether you should use it.
 With Quarkus Data Hibernate, you don't need to worry about that choice upfront: you can add `quarkus-data-hibernate` and switch to reactive when you need it.
+
 Why you'd need Hibernate Reactive is outside the scope of this blog post, but here's a good example: when you need to interact with other reactive APIs, Hibernate Reactive provides a non-blocking API that composes naturally with them.
 As always, I suggest you try both, measure performance, and see what fits your needs.
 The same entity model you've already defined works unchanged with a reactive driver.
@@ -541,7 +549,8 @@ This will be renamed to match the Quarkus Data naming in a future release.
 Panache 1 is not going away.
 It will remain available as an extension for existing applications, and we have no plans to remove it.
 
-That said, Quarkus Data Hibernate is where all new development and investment is happening.
+That said, Quarkus Data Hibernate is where all new development and investment is happening. We also think Quarkus Data Hibernate is the best experience we can provide to Quarkus users: it makes simple cases easy, and keep more complex scenarios doable without any surprises.
+
 We are working on migration tooling to help existing Panache 1 users transition when they are ready, and we will share more details as that work progresses.
 
 We are also revamping the documentation to be more opinionated and guide users toward a clear path, and improving test coverage so that generated projects include working tests out of the box.
