@@ -13,12 +13,12 @@ author: lmolteni
 You might have read https://quarkus.io/blog/hibernate-panache-next/[this blog post] about Panache Next, the new version of Panache that we're currently developing.
 This blog post is about its natural evolution.
 
-Having discussed current database access patterns in conferences, meetings and user feedback sessions, we know that the current implementation of Panache, which we'll call Panache 1 in this blog post, is popular as a data access mechanism, albeit the naming is not as popular as we wanted.
+Having discussed current database access patterns in conferences, meetings and user feedback sessions, we know that the current implementation of Panache, which we'll call Panache 1 in this blog post, is popular as a data access mechanism, although the naming is not as popular as we wanted.
 
 Despite Panache 1's popularity, we discovered that there is some confusion on exactly what Quarkus extension to use.
 
 Should a user that needs database access in a Quarkus application use the Hibernate extension, the Hibernate Reactive extension, Panache, or something else?
-Given that Hibernate is currently the most popular extension in Quarkus (as most applications will need persistence on the database) you might imagine that this confusion is creating some of friction.
+Given that Hibernate is currently the most popular extension in Quarkus (as most applications will need persistence on the database) you might imagine that this confusion is creating some friction.
 
 Try it yourself: create a Quarkus app with the CLI, then search for a database extension:
 
@@ -149,7 +149,7 @@ This example uses named parameters (`:state`) and `setParameter` to bind values 
 If you think it's a good idea to concatenate strings into your queries instead, please don't: it exposes your application to SQL injection attacks.
 ====
 
-If SQL is enough for you, this is a perfectly valid example of `quarkus-data-hibernate`.
+If SQL is enough for you, this is a perfectly valid use case of `quarkus-data-hibernate`.
 Inlining the queries inside the endpoints can be enough for very simple example, but it becomes harder to create abstractions.
 We can then put these queries inside a repository, similar to what you can do in other frameworks such as Spring Data JDBC.
 Using Hibernate's `@SQL` annotation, the annotation processor generates the implementation at compile time.
