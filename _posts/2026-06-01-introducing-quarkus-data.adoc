@@ -181,6 +181,9 @@ public interface DatabaseInfo {
 }
 ----
 
+
+// TODO Luca check batching (Stateless disables batching)
+
 Working with raw SQL is a perfectly valid approach for production use.
 Hibernate executes these queries as prepared statements, and `StatelessSession` supports JDBC batching for insert, update, and delete operations.
 Connection pooling and session lifecycle are managed by the container, and transactions work with `@Transactional` as expected.
@@ -385,7 +388,9 @@ public Book createWithAuthor(String title, String isbn, int price, String author
 
 Because `Book.author` is a managed association, Hibernate persists the author automatically when you persist the book.
 
-TODO => I'm not sure whether to include this as the output is very similar to injecting the session
+TODO => I'm not sure whether to include this as the output is very similar to injecting the session. The advantages is that you get lazy loading so it's better for queries
+
+TODO => Entity Manager has other advantages to express business logic without having to care about the DB lifecycle. You can limit the DB interactions. If you're doing this in a stateless session you need to think about the DB, while in stateful you might decide not to and in some cases it'll work just fine
 
 With https://jakarta.ee/specifications/data/1.1/[Jakarta Data 1.1], you will be able to do the same thing inside a repository using `@Persist` instead of `@Save`.
 `@Persist` makes the repository stateful, backed by a persistence context instead of a `StatelessSession`:
