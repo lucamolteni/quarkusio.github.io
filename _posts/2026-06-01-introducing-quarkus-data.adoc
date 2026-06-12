@@ -10,8 +10,8 @@ author: lmolteni
 
 == Quarkus Data: One Gateway for Data Access
 
-You might have read https://quarkus.io/blog/hibernate-panache-next/[this blog post] about Panache Next, the new version of Panache that we're currently developing.
-This blog post is about its natural evolution.
+You might have read https://quarkus.io/blog/hibernate-panache-next/[this blog post] about Panache Next, the new version of Panache that we're currently developing, and https://quarkus.io/blog/panache-next-renamed-to-quarkus-data/[Stephane's follow-up] on the rename to Quarkus Data.
+This blog post is about what comes next.
 
 Having discussed current database access patterns in conferences, meetings and user feedback sessions, we know that the current implementation of Panache, which we'll call Panache 1 in this blog post, is popular as a data access mechanism, although the naming is not as popular as we wanted.
 
