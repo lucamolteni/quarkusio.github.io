@@ -31,7 +31,7 @@ quarkus extension add jpa
 
 image::extension-search-jpa.png[Searching for JPA returns 16 extensions]
 
-That's a lot of results. Some of them are not obviously related but the ones on top are misleading.
+That's a lot of results. Some of them are not obviously related, but the ones on top are misleading.
 And if you try searching for "database" instead, it's even worse:
 
 image::extension-search-database.png[Searching for database returns even more extensions]
@@ -47,7 +47,7 @@ To understand how we got here, we need to go back to the early days of Quarkus.
 Developers wanted a simple way to avoid writing repetitive data access code: define an entity, get basic CRUD operations, and declare queries in a single place without writing similar query methods by hand.
 Also, users love the idea of the "repository class", a class that will hold such queries and some helpers to avoid writing code.
 At the time, there was no standard repository pattern for Hibernate, so the Quarkus team created Panache to fill that gap.
-Panache provided a repository pattern, a single place to define queries for each entity, and also offered an active record pattern to simplify data access by putting persistence methods directly to their entities.
+Panache provided a repository pattern, a single place to define queries for each entity, and also offered an active record pattern to simplify data access by putting persistence methods directly on their entities.
 
 Since then, the Jakarta EE ecosystem has caught up.
 Jakarta Data <<jd>> standardizes the repository pattern across SQL and NoSQL databases, with an annotation processor that generates implementations at compile time, including full type checking of queries and parameter bindings against your entity model.
@@ -59,7 +59,8 @@ In fact, the influence went both ways: ideas that originated in Panache, like wr
 == Introducing Quarkus Data
 
 Quarkus Data is an umbrella project for data access in Quarkus.
-It groups all data access modules under a single name, making it easier to find documentation and understand how the pieces fit together.
+It groups all data access extensions we showed earlier under a single name, making it easier to find documentation and understand how the pieces fit together.
+This is the biggest change to data access in Quarkus since the introduction of Panache, and we believe it's a step forward for both new and existing users.
 
 [NOTE]
 .Why "Quarkus Data" and not "Panache Next"?
@@ -95,23 +96,24 @@ Or in your `pom.xml`:
 </dependency>
 ----
 
-This single extension gives you access to multiple data access styles, so you can pick the one that fits your application:
+This single extension gives you everything you need to start with data access in your application. It's structured in a way that makes "simple things easy, and complex things possible".
+This means that it offers an experience that is enjoyable for newcomers of Hibernate, without limiting advanced users from using advanced features.
 
-- **Active record** — persistence operations live directly on your entity. Define your queries in a nested interface, and the entity itself becomes the API. The simplest way to get started.
-- **Repositories** — define a standalone repository interface annotated with `@Repository`. The Hibernate annotation processor generates the implementation at compile time, with full type checking of queries and parameters against your entity model.
-- **Raw SQL** — write native SQL queries using `@SQL` on a repository method, or inject a `StatelessSession` directly. No entity mapping required.
-- **Managed session** — inject a `Session` for the full Hibernate experience: lazy loading, automatic dirty checking, batch inserts, and the first-level cache.
-- **Reactive** — wrap your return types in `Uni` and Quarkus Data switches to Hibernate Reactive under the covers. The same entity model and repositories work in both blocking and non-blocking modes.
+Here's a round up of the features it offers:
 
-All of these styles share one key design principle: the entity type is always explicit in the return type.
-When you write a method that returns `List<Book>`, the annotation processor knows the query targets `Book` — no need to repeat it in the query itself.
-This is what enables compile-time validation across all styles, and what makes the code readable without annotations or configuration telling you which entity is involved.
+- **Active Record Pattern support**: persistence operations live directly on your entity by extending a simple class. The simplest way to get started.
+- **Repositories**: define a standalone repository interface annotated with `@Repository`. The Hibernate annotation processor generates the implementation at compile time, with full type checking of queries and parameters against your entity model.
+- **Stateless and Managed session**: Explicit lifecycles for simple cases, all the power of Hibernate managed objects when you need it
+- **Reactive**: The same entity model and project work in both blocking and non-blocking modes, useful when you need to interface with reactive code.
+- **Raw SQL**: write native SQL queries using `@SQL` on a repository method for those cases in which writing SQL is easier. No entity mapping required.
 
-While Quarkus Data Hibernate is a single extension, some features require an additional dependency to keep the default footprint small.
-For example, reactive support requires adding `quarkus-hibernate-reactive` explicitly — if you don't need it, you don't pay for it.
+[NOTE]
+====
+While Quarkus Data Hibernate is the main entry point, some features require an additional dependency to keep the default footprint small.
+For example, reactive support requires adding `quarkus-hibernate-reactive` explicitly.
+====
 
-// TODO link to the tutorial once it exists
-We'll publish a hands-on tutorial shortly that walks through each style with working examples, from a first entity to a reactive pipeline.
+We'll publish a hands-on tutorial shortly that walks through each style with working examples, so stay tuned.
 
 == What about Panache 1?
 
@@ -119,18 +121,15 @@ Panache 1 is not going away.
 It will remain available as an extension for existing applications, and we have no plans to remove it.
 
 That said, Quarkus Data Hibernate is where all new development and investment is happening.
-If you're starting a new project, we'd encourage you to give it a try — it's the experience we think Quarkus users deserve.
-Fair warning: the extension is still experimental, so you might run into a rough edge or two.
-If you do, that's not a bug, that's a feedback opportunity (we tell ourselves).
+If you're starting a new project, we'd encourage you to give it a try. We really believe it's a better experience.
+The extension is still experimental, so you might find some bugs. If you do, please reach out to us either on GitHub or Zulip, we always appreciate your honest feedback.
 
 We are working on migration tooling to help existing Panache 1 users transition when they are ready, and we will share more details as that work progresses.
 
-We are also revamping the documentation to be more opinionated and guide users toward a clear path, and improving test coverage so that generated projects include working tests out of the box.
-
 == Try it today
 
-You can try Quarkus Data Hibernate today on the Quarkus `main` branch.
-It will ship in Quarkus 4.0.
+You can try Quarkus Data Hibernate today from Quarkus 3.37.0.
+It will also ship in Quarkus 4.0.
 
 Give it a try and let us know what you think. Feedback is welcome on https://quarkusio.zulipchat.com/#narrow/channel/187038-dev/topic/WG.20-.20Panache.2ENext[Zulip] or via https://github.com/quarkusio/quarkus/issues[GitHub issues].
 
