@@ -1,9 +1,9 @@
 ---
 layout: post
 title: 'Introducing Quarkus Data: One Gateway for Data Access'
-date: 2026-06-01
+date: 2026-06-12
 tags: extension hibernate data panache
-synopsis: 'Quarkus Data unifies the data access experience for developers.'
+synopsis: 'Quarkus Data unifies the data access experience in Quarkus: the place to start.'
 author: lmolteni
 ---
 :imagesdir: /assets/images/posts/introducing-quarkus-data
@@ -31,7 +31,7 @@ quarkus extension add jpa
 
 image::extension-search-jpa.png[Searching for JPA returns 16 extensions]
 
-That's a lot of results. Some of them are not obviously related but the ones on top are seriously misleading.
+That's a lot of results. Some of them are not obviously related but the ones on top are misleading.
 And if you try searching for "database" instead, it's even worse:
 
 image::extension-search-database.png[Searching for database returns even more extensions]
@@ -40,19 +40,21 @@ Which one do you pick?
 
 == From Panache to Jakarta Data
 
-This situation is admittedly confusing, but it didn't happen by accident. Every one of those extensions exists because it solves a real problem.
+This situation is admittedly confusing, but it didn't happen by accident.
+Every one of those extensions exists because it solves a real problem.
 To understand how we got here, we need to go back to the early days of Quarkus.
 
 Developers wanted a simple way to avoid writing repetitive data access code: define an entity, get basic CRUD operations, and declare queries in a single place without writing similar query methods by hand.
 Also, users love the idea of the "repository class", a class that will hold such queries and some helpers to avoid writing code.
 At the time, there was no standard repository pattern for Hibernate, so the Quarkus team created Panache to fill that gap.
-Panache provided a repository pattern, a single place to define queries for each entity, and also offered an active record pattern for those who preferred attaching persistence methods directly to their entities.
+Panache provided a repository pattern, a single place to define queries for each entity, and also offered an active record pattern to simplify data access by putting persistence methods directly to their entities.
 
 Since then, the Jakarta EE ecosystem has caught up.
 Jakarta Data <<jd>> standardizes the repository pattern across SQL and NoSQL databases, with an annotation processor that generates implementations at compile time, including full type checking of queries and parameter bindings against your entity model.
 It is a top-level specification in Jakarta EE 11 that supports both Jakarta Persistence and Jakarta NoSQL <<nosql>>.
 
 With Jakarta Data now standardizing what Panache pioneered, it was natural for the Quarkus team to build on it.
+In fact, the influence went both ways: ideas that originated in Panache, like writing partial HQL clauses that restrict a generated query rather than writing the full query from scratch, shaped the direction of the Jakarta Data specification itself.
 
 == Introducing Quarkus Data
 
@@ -62,8 +64,10 @@ It groups all data access modules under a single name, making it easier to find 
 [NOTE]
 .Why "Quarkus Data" and not "Panache Next"?
 ====
-The Panache name never quite caught on with users, and it could have misled them into thinking this was a new improved implementation of Hibernate, which it definitely is not.
-We chose "Data" because the project is built on Jakarta Data, and it might help users migrating from Spring as they're already used to the "Data" naming.
+The Panache name was popular with our users, but it had a discoverability problem.
+"Hibernate with Panache" was meant to signal a better Hibernate experience, but if you didn't already know what Panache was, the name didn't tell you.
+A user searching for "hibernate" or "data" would see Panache in the results, but nothing about the name suggested it was the simpler way to do repositories, active record, or CRUD.
+We chose "Data" because the project is built on Jakarta Data, it's self-explanatory, and it might help users migrating from Spring as they're already used to the "Data" naming.
 It's also an opportunity to create an umbrella that covers both SQL and NoSQL under the same name.
 ====
 
@@ -91,472 +95,33 @@ Or in your `pom.xml`:
 </dependency>
 ----
 
-// TODO Add the jdbc driver as well or H2 will be used as default?
-
-Currently, the Hibernate annotation processor needs to be configured explicitly in your build.
-We plan to make this automatic, but for now add the following to your `maven-compiler-plugin` configuration:
-// TODO LUCA Add the link to the issue
-
-[source,xml]
-----
-<plugin>
-    <artifactId>maven-compiler-plugin</artifactId>
-    <configuration>
-        <annotationProcessorPaths>
-            <path>
-                <groupId>org.hibernate.orm</groupId>
-                <artifactId>hibernate-processor</artifactId>
-            </path>
-        </annotationProcessorPaths>
-    </configuration>
-</plugin>
-----
-
-Let's walk through what it offers, in order of complexity.
-
-=== Simple SQL query
-
-The simplest thing you can do to access your database is to write native SQL queries directly, without defining any entity.
-Inject a `StatelessSession` and use `createNativeQuery`, mapping results to a Java record:
-
-[source,java]
-----
-@Path("/db")
-public class DatabaseResource {
-    @Inject
-    StatelessSession session;
-
-    record ConnectionInfo(int pid, String usename, String application_name, String state) {}
-
-    @GET
-    @Path("/connections")
-    public List<ConnectionInfo> connections(@QueryParam("state") String state) {
-        return session.createNativeQuery("""
-                SELECT pid, usename, application_name, state
-                FROM pg_stat_activity
-                WHERE datname = current_database()
-                  AND (state = :state OR CAST(:state AS TEXT) IS NULL)
-                """, ConnectionInfo.class)
-            .setParameter("state", state)
-            .getResultList();
-    }
-}
-----
-
-[WARNING]
-====
-This example uses named parameters (`:state`) and `setParameter` to bind values safely.
-If you think it's a good idea to concatenate strings into your queries instead, please don't: it exposes your application to SQL injection attacks.
-====
-
-If SQL is enough for you, this is a perfectly valid use case of `quarkus-data-hibernate`.
-Inlining the queries inside the endpoints can be enough for very simple example, but it becomes harder to create abstractions.
-We can then put these queries inside a repository, similar to what you can do in other frameworks such as Spring Data JDBC.
-Using Hibernate's `@SQL` annotation, the annotation processor generates the implementation at compile time.
-A standard `@NativeQuery` annotation is being added to Jakarta Persistence (https://github.com/jakartaee/persistence/issues/991[jakartaee/persistence#991], https://github.com/jakartaee/persistence/pull/992[jakartaee/persistence#992]) and will be usable as an alternative to `@SQL` in a future release:
-
-[source,java]
-----
-@Repository
-public interface DatabaseInfo {
-
-    @SQL("""
-        SELECT pid, usename, application_name, state
-        FROM pg_stat_activity
-        WHERE datname = current_database()
-          AND (state = :state OR CAST(:state AS TEXT) IS NULL)
-        """)
-    // @NativeQuery will be supported in Jakarta Persistence 4.0
-    List<ConnectionInfo> activeConnections(String state);
-}
-----
-
-
-// TODO Luca check batching (Stateless disables batching)
-
-Working with raw SQL is a perfectly valid approach for production use.
-Hibernate executes these queries as prepared statements, and `StatelessSession` supports JDBC batching for insert, update, and delete operations.
-Connection pooling and session lifecycle are managed by the container, and transactions work with `@Transactional` as expected.
-However, native SQL queries are not validated at compile time: correctness should be verified with integration tests.
-When you're ready for a better developer experience, you can define entities and leverage the full power of the annotation processor.
-
-=== Introducing Entity Mapping and Repositories
-
-Entity mapping opens a whole new world of features, and it enables the true power of Hibernate.
-I won't state every feature Hibernate provides as there are plenty of materials everywhere, but let's focus on correctness and how much easier it is to check, which is particularly useful to have a fast feedback loop, for humans and AI agents.
-
-Let's map our business logic using classes.
-We're making an online physical book store, so we'll have of course books.
-By defining entity classes, we don't need to generate the schema manually: we can trust Quarkus and Hibernate to create the proper tables and focus on the business logic instead.
-
-[source,java]
-----
-@Entity
-public class Book {
-    @Id @GeneratedValue
-    public Long id;
-    public String title;
-    public String isbn;
-    public int price;
-}
-----
-
-We can then write a repository class that we can name however we want. By adding the `@Repository` annotation, Quarkus Data Hibernate will generate the methods automatically based on our type signature and the model classes, without having to write JPQL by hand. This is handy for simple queries, yet it also supports advanced scenarios by letting you add a custom query:
-
-[source,java]
-----
-@Repository
-public interface BookstoreRepository {
-
-    @Save
-    Book save(Book book);
-
-    @Find
-    Optional<Book> findByIsbn(String isbn);
-
-    @Find
-    List<Book> findByTitle(String title);
-
-    // No need for "select ... from Book" as Jakarta Data infers it from the return type
-    @Query("where price < :maxPrice order by title")
-    List<Book> cheaperThan(int maxPrice);
-}
-----
-
-`@Find` methods derive the query from parameter names: `findByIsbn(String isbn)` matches the `isbn` field on `Book`.
-If you rename the parameter to something that doesn't match, say `findByIsbn(String i)`, the build fails:
-
-[source]
-----
-error: no matching field named 'i' in entity class 'org.acme.Book'
-----
-
-This is caught at compile time by the Hibernate annotation processor, not at application startup.
-Other frameworks https://github.com/spring-projects/spring-data-jpa/issues/1690[traditionally validate queries at startup], which means you only discover mistakes when the application boots, or worse, in production.
-
-[NOTE]
-====
-To validate fields at compile time, Quarkus Data Hibernate needs to know the model of your tables: how they are structured and what fields they contain.
-This is what the entity class provides.
-Spring's `JdbcTemplate` infers the query from the name of the method, which is brittle and can lead to errors at runtime.
-Entity mapping can use very complex features, but it's also perfectly fine to define a simple entity class just for query mapping purposes.
-The same table can even be mapped by different classes for different query needs.
-Either way, it's a good starting point for building a full entity model when you need one.
-====
-
-The annotation processor also generates readable source code.
-You can open `BookRepository_.java` in `target/generated-sources/annotations/` and see the exact queries that will be executed, making debugging straightforward.
-
-Here's a possible REST endpoint implementation that uses the repository:
-
-[source,java]
-----
-@Path("/books")
-public class BookResource {
-
-    @Inject
-    BookRepository books;
-
-    @POST
-    @Transactional
-    public Book create(Book book) {
-        return books.save(book);
-    }
-
-    @GET
-    @Path("/by-isbn/{isbn}")
-    public Optional<Book> byIsbn(@PathParam("isbn") String isbn) {
-        return books.findByIsbn(isbn);
-    }
-
-    @GET
-    @Path("/cheap")
-    public List<Book> cheap(@QueryParam("max") int maxPrice) {
-        return books.cheaperThan(maxPrice);
-    }
-}
-----
-
-If you've used Hibernate before, you might notice that this example doesn't inject any session or entity manager.
-That's intentional: Jakarta Data repositories use Hibernate's `StatelessSession` under the covers, the same one we injected explicitly in the <<Simple SQL query,first example>>.
-A stateless session gives you the entity model (type-safe queries, parameter binding, schema validation) without a persistence context.
-Every operation is immediate, so you don't need to think about entity lifecycle states.
-
-=== Managed session with a persistence context
-
-If on the other hand you want Hibernate to handle the full entity lifecycle, `quarkus-data-hibernate` also gives you Jakarta Persistence and the managed `Session`.
-This is where you get lazy loading, automatic dirty checking, batch inserts, and the first-level cache.
-
-Let's add an author to our bookstore:
-
-[source,java]
-----
-@Entity
-public class Author {
-    @Id @GeneratedValue
-    public Long id;
-    public String name;
-}
-----
-
-And link it to `Book`:
-
-[source,java]
-----
-@ManyToOne
-public Author author;
-----
-
-With a managed session, you can load a book, change its author, and Hibernate will detect the change and flush it to the database at transaction commit without an explicit save call:
-
-[source,java]
-----
-@Inject
-Session session;
-
-@PUT
-@Path("/{id}/author")
-@Transactional
-public Book setAuthor(Long bookId, Long authorId) {
-    Book book = session.find(Book.class, bookId);
-    book.author = session.find(Author.class, authorId);
-    return book;
-}
-----
-
-You can mix both styles in the same application: use repositories for standard CRUD and queries, and inject `Session` when you need managed operations.
-
-
-// TODO this needs verification as Jakarta Data supports also Stateful
-Since Jakarta Data repositories are backed by `StatelessSession`, operations that require a persistence context (lazy loading, cascading persists, dirty checking) need to happen outside the repository, in your service or resource class.
-
-To see the difference, let's create a book with its author using the stateless repository.
-You need to save the author first, then the book, because there is no persistence context to cascade the insert:
-
-[source,java]
-----
-@Inject
-BookRepository books;
-
-@Inject
-AuthorRepository authors;
-
-@POST
-@Path("/with-author")
-@Transactional
-public Book createWithAuthor(String title, String isbn, int price, String authorName) {
-    Author author = new Author();
-    author.name = authorName;
-    authors.save(author);
-
-    Book book = new Book();
-    book.title = title;
-    book.isbn = isbn;
-    book.price = price;
-    book.author = author;
-    return books.save(book);
-}
-----
-
-With a managed `Session`, Hibernate handles this for you:
-
-[source,java]
-----
-@Inject
-Session session;
-
-@POST
-@Path("/with-author")
-@Transactional
-public Book createWithAuthor(String title, String isbn, int price, String authorName) {
-    Author author = new Author();
-    author.name = authorName;
-
-    Book book = new Book();
-    book.title = title;
-    book.isbn = isbn;
-    book.price = price;
-    book.author = author;
-    session.persist(book);
-    return book;
-}
-----
-
-Because `Book.author` is a managed association, Hibernate persists the author automatically when you persist the book.
-
-TODO => I'm not sure whether to include this as the output is very similar to injecting the session. The advantages is that you get lazy loading so it's better for queries
-
-TODO => Entity Manager has other advantages to express business logic without having to care about the DB lifecycle. You can limit the DB interactions. If you're doing this in a stateless session you need to think about the DB, while in stateful you might decide not to and in some cases it'll work just fine
-
-With https://jakarta.ee/specifications/data/1.1/[Jakarta Data 1.1], you will be able to do the same thing inside a repository using `@Persist` instead of `@Save`.
-`@Persist` makes the repository stateful, backed by a persistence context instead of a `StatelessSession`:
-
-[source,java]
-----
-@Repository
-public interface BookRepository {
-
-    @Persist
-    Book persist(Book book);
-}
-----
-
-The endpoint then becomes identical to the managed `Session` version, but using the repository:
-
-[source,java]
-----
-@Inject
-BookRepository books;
-
-@POST
-@Path("/with-author")
-@Transactional
-public Book createWithAuthor(String title, String isbn, int price, String authorName) {
-    Author author = new Author();
-    author.name = authorName;
-
-    Book book = new Book();
-    book.title = title;
-    book.isbn = isbn;
-    book.price = price;
-    book.author = author;
-    return books.persist(book);
-}
-----
-
-=== Hibernate Reactive
-
-If you followed the <<Quarkus Data: One Gateway for Data Access,try it yourself>> step earlier, you may have seen Hibernate Reactive among the extensions and wondered whether you should use it.
-With Quarkus Data Hibernate, you don't need to worry about that choice upfront: you can add `quarkus-data-hibernate` and switch to reactive when you need it.
-
-Why you'd need Hibernate Reactive is outside the scope of this blog post, but here's a good example: when you need to interact with other reactive APIs, Hibernate Reactive provides a non-blocking API that composes naturally with them.
-As always, I suggest you try both, measure performance, and see what fits your needs.
-The same entity model you've already defined works unchanged with a reactive driver.
-
-To make a repository reactive, declare a `Mutiny.StatelessSession` accessor and wrap the return types in `Uni`.
-The session accessor is currently required so that the annotation processor knows to generate reactive code; we plan to make this automatic by inferring it from the `Uni` return types.
-
-^ TODO This is probably a bug and should be addressed elsewhere
-
-[source,java]
-----
-@Repository
-public interface ReactiveBookRepository {
-
-    Mutiny.StatelessSession session();
-
-    @Find
-    Uni<Book> book(String isbn);
-
-    @Find
-    Uni<List<Book>> booksByTitle(String title);
-
-    @Query("where price < :maxPrice order by title")
-    Uni<List<Book>> cheaperThan(int maxPrice);
-
-    @Save
-    Uni<Book> save(Book book);
-}
-----
-
-Suppose our bookstore receives a stream of advertised books from a message queue, and we want to check which ones we don't already have in our catalog.
-Using Quarkus Messaging (which supports in-memory queues, so you can experiment without a broker) and the reactive repository, the entire pipeline stays non-blocking:
-
-[source,java]
-----
-@ApplicationScoped
-public class BookSuggestionService {
-
-    @Inject
-    ReactiveBookRepository books;
-
-    @Incoming("advertised-books")
-    @Outgoing("suggestions")
-    public Multi<String> suggestNewBooks(Multi<String> advertisedIsbns) {
-        return advertisedIsbns
-            .onItem().transformToUniAndMerge(isbn ->
-                books.book(isbn)
-                    .map(existing -> (String) null)
-                    .onFailure().recoverWithItem(isbn)
-            )
-            .select().whereNonNull();
-    }
-}
-----
-
-The repository's `book(isbn)` returns a `Uni<Book>` that integrates directly into the reactive pipeline.
-
-=== Active record style
-
-If you prefer to keep queries close to the entity rather than in a separate repository class, you can define the repository as a nested interface inside the entity itself.
-This is the same repository pattern with the same annotations; the only difference is where the interface lives:
-
-[source,java]
-----
-@Entity
-public class Book extends PanacheEntity {
-    public String title;
-    public String isbn;
-    public int price;
-
-    public interface Repo extends PanacheRepository<Book> {
-        @Find
-        Book findByIsbn(String isbn);
-
-        @Query("where price < :maxPrice order by title")
-        List<Book> cheaperThan(int maxPrice);
-    }
-}
-----
-
-Instance operations like `persist()` and `delete()` live directly on the entity, no injection needed:
-
-[source,java]
-----
-@POST
-@Transactional
-public Book create(Book book) {
-    // no repository injected, the entity persists itself
-    book.persist();
-    return book;
-}
-----
-
-For queries, you inject the nested repository:
-
-[source,java]
-----
-@Inject
-Book.Repo books;
-
-@GET
-@Path("/by-isbn/{isbn}")
-public Book byIsbn(@PathParam("isbn") String isbn) {
-    return books.findByIsbn(isbn);
-}
-----
-
-The same repository can also switch between managed and stateless sessions, or between blocking and reactive, at runtime.
-This is covered in more detail in the https://quarkus.io/blog/hibernate-panache-next/[Panache Next blog post].
-
-[NOTE]
-====
-The generated classes still use `Panache` naming (`PanacheEntity`, `PanacheRepository`) as these features were developed under the Panache Next project.
-This will be renamed to match the Quarkus Data naming in a future release.
-====
-
-// TODO:
-// 1. Change the first repository example (BookstoreRepository) to be an inner interface inside Book (active record style as the default pattern)
-// 2. Throughout the post, be more explicit that inferring the HQL entity type from the Java return type is a key feature — it's ubiquitous and what makes repositories work without boilerplate
-// 3. Add a section at the end about heterogeneous repositories as an advanced feature (a single repository that queries multiple entity types)
-// 4. Be explicit that heterogeneous repositories still require the entity type in the return type — the type is always explicit, never inferred from a generic parameter (see jakartaee/data#1476)
+This single extension gives you access to multiple data access styles, so you can pick the one that fits your application:
+
+- **Active record** — persistence operations live directly on your entity. Define your queries in a nested interface, and the entity itself becomes the API. The simplest way to get started.
+- **Repositories** — define a standalone repository interface annotated with `@Repository`. The Hibernate annotation processor generates the implementation at compile time, with full type checking of queries and parameters against your entity model.
+- **Raw SQL** — write native SQL queries using `@SQL` on a repository method, or inject a `StatelessSession` directly. No entity mapping required.
+- **Managed session** — inject a `Session` for the full Hibernate experience: lazy loading, automatic dirty checking, batch inserts, and the first-level cache.
+- **Reactive** — wrap your return types in `Uni` and Quarkus Data switches to Hibernate Reactive under the covers. The same entity model and repositories work in both blocking and non-blocking modes.
+
+All of these styles share one key design principle: the entity type is always explicit in the return type.
+When you write a method that returns `List<Book>`, the annotation processor knows the query targets `Book` — no need to repeat it in the query itself.
+This is what enables compile-time validation across all styles, and what makes the code readable without annotations or configuration telling you which entity is involved.
+
+While Quarkus Data Hibernate is a single extension, some features require an additional dependency to keep the default footprint small.
+For example, reactive support requires adding `quarkus-hibernate-reactive` explicitly — if you don't need it, you don't pay for it.
+
+// TODO link to the tutorial once it exists
+We'll publish a hands-on tutorial shortly that walks through each style with working examples, from a first entity to a reactive pipeline.
 
 == What about Panache 1?
 
 Panache 1 is not going away.
 It will remain available as an extension for existing applications, and we have no plans to remove it.
 
-That said, Quarkus Data Hibernate is where all new development and investment is happening. We also think Quarkus Data Hibernate is the best experience we can provide to Quarkus users: it makes simple cases easy, and keep more complex scenarios doable without any surprises.
+That said, Quarkus Data Hibernate is where all new development and investment is happening.
+If you're starting a new project, we'd encourage you to give it a try — it's the experience we think Quarkus users deserve.
+Fair warning: the extension is still experimental, so you might run into a rough edge or two.
+If you do, that's not a bug, that's a feedback opportunity (we tell ourselves).
 
 We are working on migration tooling to help existing Panache 1 users transition when they are ready, and we will share more details as that work progresses.
 
