@@ -545,6 +545,12 @@ The generated classes still use `Panache` naming (`PanacheEntity`, `PanacheRepos
 This will be renamed to match the Quarkus Data naming in a future release.
 ====
 
+// TODO:
+// 1. Change the first repository example (BookstoreRepository) to be an inner interface inside Book (active record style as the default pattern)
+// 2. Throughout the post, be more explicit that inferring the HQL entity type from the Java return type is a key feature — it's ubiquitous and what makes repositories work without boilerplate
+// 3. Add a section at the end about heterogeneous repositories as an advanced feature (a single repository that queries multiple entity types)
+// 4. Be explicit that heterogeneous repositories still require the entity type in the return type — the type is always explicit, never inferred from a generic parameter (see jakartaee/data#1476)
+
 == What about Panache 1?
 
 Panache 1 is not going away.
