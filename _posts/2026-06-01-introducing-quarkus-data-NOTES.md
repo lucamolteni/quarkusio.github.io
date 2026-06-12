@@ -50,7 +50,7 @@ The blog post emphasizes compile-time checking (lines 226–235: the `findByIsbn
 
 ## 6. Blog post structure: lead with Active Record — Alan Kay framing
 
-Feedback from Yoann, Stephane, and this Insight converge: the blog post should lead with the Active Record pattern as the simplest entry point, then introduce repositories as the pattern you grow into.
+Feedback from Yoann, Stephane, and this Insight converge: the tutorial should lead with the Active Record pattern as the simplest entry point, then introduce repositories as the pattern you grow into.
 
 The current blog post structure is:
 1. Raw SQL (line 117) — simplest technically, no entities needed
