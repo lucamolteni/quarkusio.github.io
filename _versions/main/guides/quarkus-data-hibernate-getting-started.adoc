@@ -18,78 +18,87 @@ include::{includes}/extension-status.adoc[]
 You want database access: you want your application data to be persisted somewhere, you have an external database to query, and you're wondering where to start?
 In this guide we'll walk you through how to do it the Quarkus way.
 
+
+== Prerequisites
+
+You need to have the quarkus cli tool installed. [Here the instructions on how to install it](https://quarkus.io/guides/cli-tooling)
+
 == Introduction
 
-You're working on a physical bookstore website.
-You want users to be able to browse books with titles, written by authors — all prepopulated in a database.
-You already have your pages and endpoints set up for your frontend application, you just need to connect to the database and show some data to the user.
+You're working on a physical bookstore website, in which you want users to be able to browse books with titles.
+In this tutorial, we won't deal with the frontend and the user interface, we just want to connect to the database.
 
-Let's start by importing the extension, either via CLI:
+We'll start this tutorial by creating a new empty quarkus application. The easiest way to do so is to have quarkus CLI tool available:
 
 [source,bash]
 ----
+quarkus create app --name="Quarkus Data Tutorial" quarkus-data-tutorial --platform-bom=io.quarkus.platform:quarkus-bom:3.37.0.CR1
+----
+
+Let's start by importing the extension:
+
+[source,bash]
+----
+cd quarkus-data-tutorial
+
 quarkus extension add quarkus-data-hibernate
-----
-
-Or in your `pom.xml`:
-
-[source,xml,role="primary asciidoc-tabs-target-sync-cli asciidoc-tabs-target-sync-maven"]
-.pom.xml
-----
-<dependency>
-    <groupId>io.quarkus</groupId>
-    <artifactId>quarkus-data-hibernate</artifactId>
-</dependency>
-<!-- Pick your database driver -->
-<dependency>
-    <groupId>io.quarkus</groupId>
-    <artifactId>quarkus-jdbc-postgresql</artifactId>
-</dependency>
-----
-
-Or in your `build.gradle` file:
-
-[source,gradle,role="secondary asciidoc-tabs-target-sync-gradle"]
-.build.gradle
-----
-implementation("io.quarkus:quarkus-data-hibernate")
-implementation("io.quarkus:quarkus-jdbc-postgresql")
+quarkus extension add quarkus-jdbc-postgresql
 ----
 
 The first dependency, `quarkus-data-hibernate`, is the Quarkus extension that provides everything you need for database access.
 The second dependency, `quarkus-jdbc-postgresql`, is the JDBC driver that tells Quarkus how to talk to a PostgreSQL database. If you're using a different database (MySQL, MariaDB, H2, etc.), pick the corresponding `quarkus-jdbc-*` driver instead. Quarkus Data Hibernate cannot work without a JDBC driver.
-
 That's all you need to start querying your database.
 
-Now create an `import.sql` file in `src/main/resources/` to prepopulate your database, this will be useful for this tutorial.
+Run now quarkus in a separate tab of your terminal with
 
-[source,sql]
+[source,bash]
 ----
-CREATE TABLE Book (
+quarkus test
+----
+
+You don't need to restart quarkus testing, it'll run test continously after every change.
+
+Now create an `import.sql` file in `src/main/resources/` to prepopulate your database, this will be useful for this tutorial:
+
+[source,bash]
+----
+cat > src/main/resources/import.sql << 'EOF'
+CREATE TABLE IF NOT EXISTS Book (
     id BIGSERIAL PRIMARY KEY,
     title VARCHAR(255),
     isbn VARCHAR(20),
     price INT
 );
 
-INSERT INTO Book (title, isbn, price) VALUES ('Effective Java', '978-0134685991', 45);
-INSERT INTO Book (title, isbn, price) VALUES ('Clean Code', '978-0132350884', 40);
-INSERT INTO Book (title, isbn, price) VALUES ('Domain-Driven Design', '978-0321125217', 55);
-INSERT INTO Book (title, isbn, price) VALUES ('Refactoring', '978-0134757599', 50);
-INSERT INTO Book (title, isbn, price) VALUES ('The Pragmatic Programmer', '978-0135957059', 42);
+DELETE FROM Book;
+
+INSERT INTO Book (id, title, isbn, price) VALUES (1, 'Effective Java', '978-0134685991', 45);
+INSERT INTO Book (id, title, isbn, price) VALUES (2, 'Clean Code', '978-0132350884', 40);
+INSERT INTO Book (id, title, isbn, price) VALUES (3, 'Domain-Driven Design', '978-0321125217', 55);
+INSERT INTO Book (id, title, isbn, price) VALUES (4, 'Refactoring', '978-0134757599', 50);
+INSERT INTO Book (id, title, isbn, price) VALUES (5, 'The Pragmatic Programmer', '978-0135957059', 42);
+EOF
 ----
 
 This SQL script creates a `Book` table with four columns (`id`, `title`, `isbn`, `price`) and inserts five books into it.
-While developing, Quarkus runs this file automatically at startup when the database is empty, so you'll have data to query right away.
+While developing, Quarkus imports this SQL file automatically at startup when the database is empty, so you'll have data to query right away.
 
 TIP: JDBC connection are called "Data Source" in Quarkus. In dev mode, if you don't configure a datasource, Quarkus will automatically start a PostgreSQL container for you via Dev Services. This means you can run `quarkus dev` and start coding without installing or configuring a database.
 
 == Simple SQL query
 
-The simplest thing you can do to access your database is to write native SQL queries directly:
+The simplest thing you can do to access your database is to write native SQL queries directly, create a file called in the package `org.acme` called `BookService`:
 
 [source,java]
 ----
+package org.acme;
+
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import org.hibernate.StatelessSession;
+
+import java.util.List;
+
 @ApplicationScoped // <1>
 public class BookService {
 
@@ -100,20 +109,20 @@ public class BookService {
 
     public List<BookRecord> findByTitle(String title) {
         return session.createNativeQuery("""
-                SELECT * FROM Book
+                SELECT id, title, isbn, price FROM Book
                 WHERE title = :title
                 """, BookRecord.class) // <4>
-            .setParameter("title", title)
-            .getResultList(); // <5>
+                .setParameter("title", title)
+                .getResultList(); // <5>
     }
 
     public List<BookRecord> cheaperThan(int maxPrice) {
         return session.createNativeQuery("""
-                SELECT * FROM Book
+                SELECT id, title, isbn, price FROM Book
                 WHERE proce < :maxPrice
                 """, BookRecord.class)
-            .setParameter("maxPrice", maxPrice)
-            .getResultList();
+                .setParameter("maxPrice", maxPrice)
+                .getResultList();
     }
 }
 ----
@@ -132,19 +141,112 @@ If you think it's a good idea to concatenate strings into your queries instead, 
 If SQL is enough for you, this is a perfectly valid use case of `quarkus-data-hibernate`.
 But as your application grows, you'll want a place to group all your query methods together rather than scattering them across service classes.
 
-Even though raw SQL is a perfectly valid approach, it has a few problems.
-First of all, type safety: nobody is going to validate your queries at compile time.
-Did you spot the typo in `cheaperThan`? The column is called `price`, not `proce`, but the compiler won't tell you.
-You're probably going to have integration tests to catch that, but it would be faster if the compiler could validate it earlier.
-Second, you'll realize after having written some of these method that SQL syntax is not particular compact, and having many methods querying the same parts of the database will produce very similar query. It'd be nice to have a more compact way to express these methods.
-Third: you might wonder where to put all these methods: it'd be nice to have them together.
-
-== Entities and repositories
-
-We can solve all three problems by mapping our table to a Java class and defining a repository for it:
+We can now create a test in `src/test/java/org/acme/BookServiceTest.java` that will check everything is working correctly:
 
 [source,java]
 ----
+package org.acme;
+
+import io.quarkus.test.junit.QuarkusTest;
+import jakarta.inject.Inject;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+@QuarkusTest // <1>
+public class BookServiceTest {
+
+    @Inject
+    BookService bookService; // <2>
+
+    @Test
+    void shouldFindBookByTitle() {
+        var books = bookService.findByTitle("Effective Java"); // <3>
+        assertEquals(1, books.size());
+        assertEquals("Effective Java", books.getFirst().title());
+    }
+
+    @Test
+    void shouldReturnEmptyListForUnknownTitle() {
+        var books = bookService.findByTitle("Unknown Book");
+        assertTrue(books.isEmpty());
+    }
+}
+----
+<1> `@QuarkusTest` starts the full Quarkus application for the test, including the database and Dev Services. The data from `import.sql` is loaded automatically.
+<2> We inject our `BookService` just like we would in application code.
+<3> We query for a book we know exists in `import.sql` and verify it's returned.
+
+If you have `quarkus test` running in another terminal, this test will run automatically as soon as you save the file.
+
+Even though raw SQL is a perfectly valid approach, it has a few problems.
+First of all, type safety: nobody is going to validate your queries at compile time.
+
+Let's add a test for `cheaperThan` to our `BookServiceTest`:
+
+[source,java]
+----
+@Test
+void shouldFindCheaperBooks() {
+    var books = bookService.cheaperThan(45);
+    assertEquals(2, books.size()); // Clean Code (40) and The Pragmatic Programmer (42)
+}
+----
+
+The console in `quarkus test` will show
+
+[source,shell]
+----
+org.hibernate.exception.SQLGrammarException: JDBC exception executing SQL [ERROR: column "proce" does not exist
+
+Hint: Perhaps you meant to reference the column "book.price".
+
+Position: 26] [SELECT * FROM Book
+
+WHERE proce < ?
+----
+
+This test will fail at runtime with a SQL error because the column `proce` doesn't exist.
+Did you initially spot the typo in `cheaperThan`? The column is called `price`, not `proce`, but the compiler won't tell you.
+You're probably going to have integration tests to catch that, but it would be faster if the compiler could validate it earlier.
+
+You can fix the test by modifying the `BookService.java` file:
+
+[source,java]
+----
+    public List<BookRecord> cheaperThan(int maxPrice) {
+        // <1>
+        return session.createNativeQuery("""
+                SELECT * FROM Book
+                WHERE price < :maxPrice
+                """, BookRecord.class)
+            .setParameter("maxPrice", maxPrice)
+            .getResultList();
+    }
+----
+<1> Change `proce` to `price` here
+
+Writing SQL by hand makes sense for very simple scenarios, or when you need database-specific features such as window functions, recursive functions and similar advanced patterns.
+
+== Entities and repositories
+
+We can avoid all these problems by mapping our table to a Java class and defining a repository for it.
+We now introduce the concept of Entity, for now we might think of it as a Java class that maps to a Database Table.
+
+Create a file called in the package `org.acme` called `Book.java`:
+
+[source,java]
+----
+package org.acme;
+
+import io.quarkus.hibernate.panache.PanacheRepository;
+import io.quarkus.hibernate.panache.WithId;
+import jakarta.data.repository.Find;
+import jakarta.data.repository.Query;
+import jakarta.persistence.Entity;
+
+import java.util.List;
+
 @Entity // <1>
 public class Book extends WithId.AutoLong { // <2>
     public String title; // <3>
