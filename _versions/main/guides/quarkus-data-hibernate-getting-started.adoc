@@ -353,7 +353,7 @@ Now if you make the same kind of typo we had earlier, i.e. `findByTitle(String t
 error: no matching field named 'tilte' in entity class 'org.acme.Book'
 ----
 
-== Creating entities
+== Creating new entities
 
 So far we've been reading data, but our bookstore is crowdsourced: users can add books they want to share.
 We need to persist new books to the database.
@@ -401,6 +401,40 @@ public class CrowdSourceService {
 ----
 <1> Wraps the method in a database transaction. This is required to define the scope of your operations, so that related operations might be committed or rollbacked together. This case is very simple.
 <2> `insert()` immediately executes an `INSERT` statement against the database.
+
+Let's write a test to verify that inserting a new book actually works. Create `src/test/java/org/acme/CrowdSourceServiceTest.java`:
+
+[source,java]
+----
+package org.acme;
+
+import io.quarkus.test.junit.QuarkusTest;
+import jakarta.inject.Inject;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+@QuarkusTest
+public class CrowdSourceServiceTest {
+
+    @Inject
+    CrowdSourceService crowdSourceService;
+
+    @Inject
+    Book.Repo bookRepo;
+
+    @Test
+    void shouldInsertNewBook() {
+        crowdSourceService.contributeNewBook("New Book", "978-1111111111");
+        List<Book> books = bookRepo.findByTitle("New Book");
+        assertEquals(1, books.size());
+        assertEquals("978-1111111111", books.getFirst().isbn);
+        assertEquals(0, books.getFirst().price);
+    }
+}
+----
 
 [NOTE]
 ====
@@ -488,6 +522,41 @@ public class CrowdSourceService {
 }
 ----
 <1> `persist()` (note that is different than: `insert()`) doesn't execute SQL immediately. It tells Hibernate "this object is new, make sure it'll persisted in the DB." Because `Book.author` has `cascade = CascadeType.PERSIST`, we don't need to persist the `Author` separately. Hibernate figures out that the author is new, inserts it first (to get its ID), then inserts the book with the correct foreign key.
+
+Let's update our test to verify that persisting a book also persists its author:
+
+[source,java]
+----
+package org.acme;
+
+import io.quarkus.test.junit.QuarkusTest;
+import jakarta.inject.Inject;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+@QuarkusTest
+public class CrowdSourceServiceTest {
+
+    @Inject
+    CrowdSourceService crowdSourceService;
+
+    @Inject
+    Book.Repo bookRepo;
+
+    @Test
+    void shouldPersistNewBookWithAuthor() {
+        crowdSourceService.contributeNewBook("New Book", "978-1111111111", "Jane Doe");
+        List<Book> books = bookRepo.findByTitle("New Book");
+        assertEquals(1, books.size());
+        assertEquals("978-1111111111", books.getFirst().isbn);
+        assertNotNull(books.getFirst().author);
+        assertEquals("Jane Doe", books.getFirst().author.name);
+    }
+}
+----
 
 Compare it to what this would have been with a stateless session instead:
 
