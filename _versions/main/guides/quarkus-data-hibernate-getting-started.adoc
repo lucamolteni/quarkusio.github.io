@@ -67,8 +67,10 @@ Now create an `import.sql` file in `src/main/resources/` to prepopulate your dat
 
 [source,bash]
 ----
+CREATE SEQUENCE IF NOT EXISTS Book_SEQ START WITH 6 INCREMENT BY 50;
+
 CREATE TABLE IF NOT EXISTS Book (
-    id BIGSERIAL PRIMARY KEY,
+    id BIGINT PRIMARY KEY DEFAULT nextval('Book_SEQ'),
     title VARCHAR(255),
     isbn VARCHAR(20),
     price INT
@@ -81,11 +83,10 @@ INSERT INTO Book (id, title, isbn, price) VALUES (2, 'Clean Code', '978-01323508
 INSERT INTO Book (id, title, isbn, price) VALUES (3, 'Domain-Driven Design', '978-0321125217', 55);
 INSERT INTO Book (id, title, isbn, price) VALUES (4, 'Refactoring', '978-0134757599', 50);
 INSERT INTO Book (id, title, isbn, price) VALUES (5, 'The Pragmatic Programmer', '978-0135957059', 42);
-ALTER SEQUENCE Book_SEQ RESTART WITH 6;
 ----
 
-This SQL script creates a `Book` table with four columns (`id`, `title`, `isbn`, `price`) and inserts five books into it.
-The `ALTER SEQUENCE` at the end ensures that Hibernate's ID generator starts after the imported IDs, avoiding conflicts when inserting new rows later.
+This SQL script creates a sequence for ID generation, the `Book` table, and inserts five books.
+The sequence starts at 6 so that new IDs don't collide with the imported data.
 While developing, Quarkus imports this SQL file automatically at startup, so in this tutorial we have something to start with.
 
 TIP: JDBC connections are called "Data Sources" in Quarkus. In dev mode, if you don't configure a datasource, Quarkus will automatically start a PostgreSQL container for you via Dev Services. This means you can run `quarkus dev` and start coding without installing or configuring a database. See the xref:datasource.adoc[Datasource guide] for more details.
@@ -285,8 +286,8 @@ Do not name your repository interface literally `Repository`, it conflicts with 
 
 [IMPORTANT]
 ====
-Now that we have an entity, Hibernate will automatically generate the table for us.
-Remove the `CREATE TABLE` statement from `import.sql` and just keep the `INSERT` statements to avoid weird behavior.
+Now that we have an entity, Hibernate will automatically generate the table and sequence for us.
+Remove the `CREATE SEQUENCE`, `CREATE TABLE`, and `DELETE FROM` statements from `import.sql` and keep only the `INSERT` statements.
 ====
 
 The repository is an interface, so you might wonder who implements it. It's the Hibernate annotation processor, which is a key component in this solution.
