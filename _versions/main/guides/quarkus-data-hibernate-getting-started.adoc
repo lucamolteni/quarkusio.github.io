@@ -395,37 +395,38 @@ implementation("io.quarkus:quarkus-reactive-pg-client")
 `quarkus-hibernate-reactive` adds the reactive Hibernate engine, which uses non-blocking I/O under the covers instead of JDBC.
 `quarkus-reactive-pg-client` is the reactive equivalent of `quarkus-jdbc-postgresql`. It provides a non-blocking PostgreSQL driver built on Vert.x. As its blocking counterpart, it's mandatory for Quarkus Data Hibernate to work.
 
-// TODO Luca this is a problem! We said that we can easily reuse the same model but we need to change the interface type to use reactive, and it's a shame If you want to try reactive you should be able to reuse the exact same model:
-// TODO Luca instead of changing the repository, make it create a different repository, and show later the problem with entity's lifecycle method.
-Then switch your entity to `PanacheEntity.Reactive` and your repository to `PanacheRepository.Reactive`.
-The only difference is that all operations now return `Uni<T>` instead of `T`:
+Now let's change only the minimal part of the code you need to try reactive. Let's add a second nested repository for reactive operations:
 
 [source,java]
 ----
 @Entity
-public class Book extends WithId.AutoLong implements PanacheEntity.Reactive { // <1>
+public class Book extends WithId.AutoLong implements PanacheEntity.Managed {
     public String title;
     public String isbn;
     public int price;
     @ManyToOne(cascade = CascadeType.PERSIST)
     public Author author;
 
-    public interface Repo extends PanacheRepository.Reactive<Book, Long> {
+    public interface Repo extends PanacheRepository<Book> { // <1>
         @Find
-        Uni<List<Book>> findByTitle(String title); // <2>
+        List<Book> findByTitle(String title);
 
         @Query("where price < :maxPrice order by title")
-        Uni<List<Book>> cheaperThan(int maxPrice);
+        List<Book> cheaperThan(int maxPrice);
+    }
+
+    public interface ReactiveRepo extends PanacheRepository.Reactive<Book, Long> { // <2>
+        @Find
+        Uni<List<Book>> findByTitle(String title); // <3>
     }
 }
 ----
-<1> `PanacheEntity.Reactive` switches the entity to reactive mode.
-<2> All operations now return `Uni<T>` instead of `T`. `Uni` is a Mutiny reactive type that represents a value that will be available in the future. Instead of blocking the thread while waiting for the database, the method returns immediately with a `Uni` that will emit the result when the query completes.
+<1> The blocking repository stays unchanged.
+<2> A new reactive repository for the same entity. Both repositories can coexist
+<3> The operations in the return `Uni<T>` instead of `T`. `Uni` is a Mutiny reactive type that represents a value that will be available in the future. Instead of blocking the thread, the method returns immediately and emits the result when the query completes.
 
 Suppose our bookstore receives a stream of advertised books from a message queue, and we want to check which ones we don't already have in our catalog.
 Using Quarkus Messaging and the reactive repository, the entire pipeline stays non-blocking:
-
-// TODO make this example runnable with in memory testing
 
 [source,java]
 ----
@@ -433,31 +434,36 @@ Using Quarkus Messaging and the reactive repository, the entire pipeline stays n
 public class BookSuggestionService {
 
     @Inject
-    Book.Repo books;
+    Book.ReactiveRepo books; // <1>
 
-    @Incoming("advertised-books") // <1>
-    @Outgoing("suggestions") // <2>
+    @Incoming("advertised-books") // <2>
+    @Outgoing("suggestions") // <3>
     public Multi<String> suggestNewBooks(Multi<String> advertisedIsbns) {
         return advertisedIsbns
             .onItem().transformToUniAndMerge(isbn ->
-                books.findByTitle(isbn) // <3>
+                books.findByTitle(isbn) // <4>
                     .map(found -> found.isEmpty() ? isbn : null)
             )
             .select().whereNonNull();
     }
 }
 ----
-<1> `@Incoming` connects the method to a message channel named `advertised-books`. Messages arrive as a `Multi<String>` reactive stream of ISBNs.
-<2> `@Outgoing` sends the method's output to the `suggestions` channel. These are Quarkus Messaging annotations
-<3> For each ISBN, we check the database. If no book is found (`found.isEmpty()`), the ISBN is forwarded.
+<1> We inject `Book.ReactiveRepo` instead of `Book.Repo`.
+<2> `@Incoming` connects the method to a message channel named `advertised-books`. Messages arrive as a `Multi<String>` — a reactive stream of ISBNs.
+<3> `@Outgoing` sends the method's output to the `suggestions` channel. These are Quarkus Messaging annotations that work with Kafka, AMQP, or in-memory channels for testing.
+<4> For each ISBN, we check the database. If no book is found (`found.isEmpty()`), the ISBN is forwarded. The entire pipeline runs without blocking any thread.
 
-The entity model, the repository methods, the queries — everything stays the same.
+The entity hasn't changed, it still has `.insert()` that blocks the thread.
+If you also need to persist entities reactively, you could access the entity as a managed reactive entity and save it from there
 
-^ This is not true
+[source,java]
+----
+ book.managedReactive().save()
+----
+
+You might notice we're not calling `book.persist()` like we did in the blocking version. That's because the entity's lifecycle methods (`persist()`, `delete()`) are tied to the entity's interface type. Since `Book` implements `PanacheEntity.Managed` (blocking), calling `book.persist()` would block. To persist reactively without changing the entity model, we use a repository `@Save` method instead.
 
 For the full details on reactive sessions, stateless reactive, and combining blocking and reactive code, see the xref:quarkus-data-hibernate.adoc#_let_s_get_reactive[reference guide].
-
-// TODO now handle lifecycle
 
 == Going further
 
