@@ -24,7 +24,7 @@ You're working on a physical bookstore website.
 You want users to be able to browse books with titles, written by authors — all prepopulated in a database.
 You already have your pages and endpoints set up for your frontend application, you just need to connect to the database and show some data to the user.
 
-Let's start by importing the extension, either via Maven or via the CLI:
+Let's start by importing the extension, either via CLI:
 
 [source,bash]
 ----
@@ -47,6 +47,8 @@ Or in your `pom.xml`:
 </dependency>
 ----
 
+Or in your `build.gradle` file:
+
 [source,gradle,role="secondary asciidoc-tabs-target-sync-gradle"]
 .build.gradle
 ----
@@ -54,9 +56,12 @@ implementation("io.quarkus:quarkus-data-hibernate")
 implementation("io.quarkus:quarkus-jdbc-postgresql")
 ----
 
+The first dependency, `quarkus-data-hibernate`, is the Quarkus extension that provides everything you need for database access.
+The second dependency, `quarkus-jdbc-postgresql`, is the JDBC driver that tells Quarkus how to talk to a PostgreSQL database. If you're using a different database (MySQL, MariaDB, H2, etc.), pick the corresponding `quarkus-jdbc-*` driver instead. Quarkus Data Hibernate cannot work without a JDBC driver.
+
 That's all you need to start querying your database.
 
-Create an `import.sql` file in `src/main/resources/` to prepopulate your database:
+Now create an `import.sql` file in `src/main/resources/` to prepopulate your database, this will be useful for this tutorial.
 
 [source,sql]
 ----
@@ -74,28 +79,32 @@ INSERT INTO Book (title, isbn, price) VALUES ('Refactoring', '978-0134757599', 5
 INSERT INTO Book (title, isbn, price) VALUES ('The Pragmatic Programmer', '978-0135957059', 42);
 ----
 
-TIP: In dev mode, if you don't configure a datasource, Quarkus will automatically start a PostgreSQL container for you via Dev Services.
+This SQL script creates a `Book` table with four columns (`id`, `title`, `isbn`, `price`) and inserts five books into it.
+While developing, Quarkus runs this file automatically at startup when the database is empty, so you'll have data to query right away.
+
+TIP: JDBC connection are called "Data Source" in Quarkus. In dev mode, if you don't configure a datasource, Quarkus will automatically start a PostgreSQL container for you via Dev Services. This means you can run `quarkus dev` and start coding without installing or configuring a database.
 
 == Simple SQL query
 
-The simplest thing you can do to access your database is to write native SQL queries directly, without defining any entity.
-Inject a `StatelessSession` and use `createNativeQuery`, mapping results to a Java record:
+The simplest thing you can do to access your database is to write native SQL queries directly:
 
 [source,java]
 ----
-@ApplicationScoped
+@ApplicationScoped // <1>
 public class BookService {
-    record BookRecord(Long id, String title, String isbn, int price) {}
+
+    record BookRecord(Long id, String title, String isbn, int price) {} // <2>
+
     @Inject
-    StatelessSession session;
+    StatelessSession session; // <3>
 
     public List<BookRecord> findByTitle(String title) {
         return session.createNativeQuery("""
                 SELECT * FROM Book
                 WHERE title = :title
-                """, BookRecord.class)
+                """, BookRecord.class) // <4>
             .setParameter("title", title)
-            .getResultList();
+            .getResultList(); // <5>
     }
 
     public List<BookRecord> cheaperThan(int maxPrice) {
@@ -108,6 +117,11 @@ public class BookService {
     }
 }
 ----
+<1> `@ApplicationScoped` makes this class a CDI bean. Quarkus creates a single instance and manages its lifecycle for you. You can then inject it anywhere you need it.
+<2> A Java record that maps to the columns returned by the SQL query. Each field name must match a column name in the result set.
+<3> `@Inject` asks Quarkus to provide a database session. A `StatelessSession` is the simplest entry point to Hibernate.
+<4> `createNativeQuery(...)` sends raw SQL to the database. The `:title` syntax is a named parameter, Hibernate will substitute the value you pass via `setParameter`.
+<5> Executes the query and returns the results as a `List`.
 
 [WARNING]
 ====
@@ -120,10 +134,10 @@ But as your application grows, you'll want a place to group all your query metho
 
 Even though raw SQL is a perfectly valid approach, it has a few problems.
 First of all, type safety: nobody is going to validate your queries at compile time.
-Did you spot the typo in `cheaperThan`? The column is called `price`, not `proce` — but the compiler won't tell you.
-You're probably going to have integration tests to catch that, but it would be nicer if the compiler could tell you right away.
-Second, you might be wondering where to put all these query methods as they accumulate.
-And you've probably also noticed that a lot of them look very similar — you're getting a bit tired of writing them by hand.
+Did you spot the typo in `cheaperThan`? The column is called `price`, not `proce`, but the compiler won't tell you.
+You're probably going to have integration tests to catch that, but it would be faster if the compiler could validate it earlier.
+Second, you'll realize after having written some of these method that SQL syntax is not particular compact, and having many methods querying the same parts of the database will produce very similar query. It'd be nice to have a more compact way to express these methods.
+Third: you might wonder where to put all these methods: it'd be nice to have them together.
 
 == Entities and repositories
 
@@ -131,32 +145,33 @@ We can solve all three problems by mapping our table to a Java class and definin
 
 [source,java]
 ----
-@Entity
-public class Book extends WithId.AutoLong {
-    public String title;
+@Entity // <1>
+public class Book extends WithId.AutoLong { // <2>
+    public String title; // <3>
     public String isbn;
     public int price;
 
-    public interface Repo extends PanacheRepository<Book> {
+    public interface Repo extends PanacheRepository<Book> { // <4>
         @Find
-        List<Book> findByTitle(String title);
+        List<Book> findByTitle(String title); // <5>
 
         @Query("where price < :maxPrice order by title")
-        List<Book> cheaperThan(int maxPrice);
+        List<Book> cheaperThan(int maxPrice); // <6>
     }
 }
 ----
+<1> Tells Hibernate that this class maps to a database table. Hibernate will use the class name as the table name and the field names as column names.
+<2> Gives the entity a generated `Long` id field automatically.
+<3> These public fields map to columns in the `Book` table. Hibernate reads and writes these fields directly.
+<4> Defines a repository: a place to put all your query methods for `Book`. By nesting it inside the entity, the queries and the data they operate on live together.
+<5> `@Find` tells Quarkus Data Hibernate to generate a query based on the method's parameter names. `findByTitle(String title)` becomes a query that matches the `title` field on `Book`. Parameters are inferred from the method signature.
+<6> `@Query` lets you write an HQL fragment when you need more control. It avoid the need to write `select b from Book`. The entity type is inferred from the return type `List<Book>`.
 
-`WithId.AutoLong` gives us a generated `Long` id without having to declare `@Id @GeneratedValue` ourselves.
-The entity tells Hibernate the structure of your data — field names, types, how they map to columns.
-Now that we have an entity, Hibernate can generate the table for us — you can remove the `CREATE TABLE` statement from `import.sql` and just keep the `INSERT` statements.
-The repository is a nested interface where you declare your query methods.
-`@Find` derives the query from the parameter name: `findByTitle(String title)` matches the `title` field on `Book`.
-`@Query` lets you write HQL fragments when you need more control — no need for `select ... from Book`, the entity type is inferred from the return type.
+Now that we have an entity, Hibernate can generate the table for us. You can remove the `CREATE TABLE` statement from `import.sql` and just keep the `INSERT` statements. This is a much type safer approach and avoids you to keep files aligned.
 
-This behavior is provided by the Hibernate annotation processor, which is a key component in this solution.
+The repository is an interface, so you might wonder who implement this. It's the Hibernate annotation processor, which is a key component in this solution.
 During compilation, it reads your entity model and your repository interfaces, validates everything, and generates implementation classes under `target/generated-sources/annotations/`.
-These generated classes are compiled together with your entities and wired up automatically by Quarkus.
+These generated classes are compiled together with your entities and wired up automatically by Quarkus. They are also simple to read, in case you want to understand how it works internally.
 
 To enable it, add the processor to your build configuration:
 
@@ -184,31 +199,29 @@ annotationProcessor enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatfor
 annotationProcessor 'org.hibernate.orm:hibernate-processor'
 ----
 
-Now if you make the same kind of typo we had earlier — say, `findByTitle(String tilte)` — the build fails:
+Now if you make the same kind of typo we had earlier, i.e. `findByTitle(String tilte)`, the build fails:
 
 [source]
 ----
 error: no matching field named 'tilte' in entity class 'org.acme.Book'
 ----
 
-No more waiting for integration tests or runtime surprises.
-
 == Creating entities
 
 So far we've been reading data, but our bookstore is crowdsourced: users can add books they want to share.
 We need to persist new books to the database.
 
-Let's update our `Book` to extend `WithId.AutoLong` and implement `PanacheEntity.Stateless`, which gives us active record operations directly on the entity:
+Let's update our `Book` to extend `WithId.AutoLong` and implement `PanacheEntity.Stateless`, which gives us lifecycle operations directly on the entity:
 
 [source,java]
 ----
 @Entity
-public class Book extends WithId.AutoLong implements PanacheEntity.Stateless {
+public class Book extends WithId.AutoLong implements PanacheEntity.Stateless { // <1>
     public String title;
     public String isbn;
     public int price;
 
-    public interface Repo extends PanacheRepository.Stateless<Book, Long> {
+    public interface Repo extends PanacheRepository.Stateless<Book, Long> { // <2>
         @Find
         List<Book> findByTitle(String title);
 
@@ -217,8 +230,11 @@ public class Book extends WithId.AutoLong implements PanacheEntity.Stateless {
     }
 }
 ----
+<1> This is the new part: `implements PanacheEntity.Stateless` gives our `Book` class methods to create, delete or update books without the need to use specific methods in repositories.
 
-`WithId.AutoLong` provides a generated `Long` id, so we don't need to declare it ourselves.
+<2> The repository also changed to `PanacheRepository.Stateless<Book, Long>` to specify the .
+// TODO LUCA ^ verify the Long type parameter is really needed
+
 Now we can write a service that lets users contribute a new book:
 
 [source,java]
@@ -226,20 +242,23 @@ Now we can write a service that lets users contribute a new book:
 @ApplicationScoped
 public class CrowdSourceService {
 
-    @Transactional
+    @Transactional // <1>
     public void contributeNewBook(String title, String isbn) {
         Book book = new Book();
         book.title = title;
         book.isbn = isbn;
         book.price = 0;
-        book.insert();
+        book.insert(); // <2>
     }
 }
 ----
+<1> Wraps the method in a database transaction. This is required to define the scope of your operations, so that related operations might be committed or rollbacked together. This case is very simple.
+<2> `insert()` immediately executes an `INSERT` statement against the database.
 
 [NOTE]
 ====
 If you're an experienced Hibernate user, you'll find this part very different to what you're used to.
+When you call `insert()`, `update()`, or `delete()`, an operation is triggered against the database.
 Managed entities are nowhere to be seen, and the idea of a detached object vs a persisted object is missing.
 This is intentional: it's a simpler model that uses `StatelessSession` under the covers.
 In this mode every change to an object requires an explicit save operation.
@@ -248,7 +267,7 @@ If you're not interested in this style and want the full power of managed entiti
 
 === About entity identifiers
 
-`WithId.AutoLong` is more powerful than the traditional `@Id @GeneratedValue` pair: there are variants for different ID types out of the box:
+`WithId.AutoLong` is more powerful than Hibernate's traditional `@Id @GeneratedValue` pair: there are variants for different ID types out of the box:
 
 - `WithId.AutoLong` — a generated `Long` id
 - `WithId.AutoUUID` — a generated `UUID` id
@@ -260,12 +279,11 @@ See the xref:quarkus-data-hibernate.adoc#_about_entity_identifiers[reference gui
 [[managed-session]]
 == Managed session
 
-With a stateless session, every change you make to an entity requires an explicit call to `insert()`, `update()`, or `delete()`.
+We said that with a stateless session, every change you make to an entity requires an explicit call to `insert()`, `update()`, or `delete()`.
 A managed session works differently: you don't need to think about when the data is going to be persisted to the database.
 Hibernate keeps track of all the changes you make to your objects and, when the transaction commits, executes the most efficient series of SQL operations it can.
 
-To switch to a managed session, implement `PanacheEntity.Managed` instead of `PanacheEntity.Stateless`.
-Let's also add an author to our bookstore, linked to `Book` with a `@ManyToOne` association:
+To slightly complicate our example Let's also add an author to our bookstore, linked to `Book` with a `@ManyToOne` association:
 
 [source,java]
 ----
@@ -275,17 +293,19 @@ public class Author extends WithId.AutoLong {
 }
 ----
 
+Now to switch to a managed session, implement `PanacheEntity.Managed` instead of `PanacheEntity.Stateless`.
+
 [source,java]
 ----
 @Entity
-public class Book extends WithId.AutoLong implements PanacheEntity.Managed {
+public class Book extends WithId.AutoLong implements PanacheEntity.Managed { // <1>
     public String title;
     public String isbn;
     public int price;
-    @ManyToOne(cascade = CascadeType.PERSIST)
+    @ManyToOne(cascade = CascadeType.PERSIST) // <2>
     public Author author;
 
-    public interface Repo extends PanacheRepository<Book> {
+    public interface Repo extends PanacheRepository<Book> { // <3>
         @Find
         List<Book> findByTitle(String title);
 
@@ -294,8 +314,12 @@ public class Book extends WithId.AutoLong implements PanacheEntity.Managed {
     }
 }
 ----
+<1> `PanacheEntity.Managed` replaces `PanacheEntity.Stateless`. This tells Hibernate to track this entity in its internal stateful persistence context
+<2> `@ManyToOne` creates a relationship between `Book` and `Author`. The `cascade = CascadeType.PERSIST` means that when you persist a `Book`, Hibernate will automatically persist its `Author` too if it's new.
+// TODO Luca Persist is not needed probably!
+<3> The repository goes back to `PanacheRepository<Book>` (not `Stateless`) since we're now using managed sessions.
 
-Now we can persist a book with its author in a single call — Hibernate takes care of the ordering and persists both:
+Now we can persist a book with its author in a single call, Hibernate takes care of the ordering and persists both:
 
 [source,java]
 ----
@@ -312,10 +336,11 @@ public class CrowdSourceService {
         book.isbn = isbn;
         book.price = 0;
         book.author = author;
-        book.persist();
+        book.persist(); // <1>
     }
 }
 ----
+<1> `persist()` (note that is different than: `insert()`) doesn't execute SQL immediately. It tells Hibernate "this object is new, make sure it'll persisted in the DB." Because `Book.author` has `cascade = CascadeType.PERSIST`, we don't need to persist the `Author` separately. Hibernate figures out that the author is new, inserts it first (to get its ID), then inserts the book with the correct foreign key.
 
 Compare it to what this would have been with a stateless session instead:
 
@@ -336,12 +361,14 @@ public void contributeNewBook(String title, String isbn, String authorName) {
 }
 ----
 
+This particular case is not incredibly less compac than the one before. IN the Stateless Session version we have to insert, one for entity, and in the managed we have a single persist at the end of it. More complicated cases (perhaps involving collections will show more explicit advantages)
+// Luca use a OneToMany example
 This shows the philosophy we've been trying to introduce since the https://quarkus.io/blog/introducing-quarkus-data/[blog post]: we want to make sure that simple things are easy, but more complex things are possible.
 
 == Reactive
 
 If you're already using reactive APIs in your application (Quarkus Messaging, reactive REST clients, Vert.x), you want your database access to compose naturally with them without blocking the event loop.
-Quarkus Data Hibernate lets you experiment with both blocking and reactive to see what works best for your case — the same entity model works unchanged with a reactive driver.
+Quarkus Data Hibernate lets you experiment with both blocking and reactive to see what works best for your case. The same entity model works unchanged with a reactive driver.
 
 First, add the reactive dependencies:
 
@@ -365,13 +392,18 @@ implementation("io.quarkus:quarkus-hibernate-reactive")
 implementation("io.quarkus:quarkus-reactive-pg-client")
 ----
 
+`quarkus-hibernate-reactive` adds the reactive Hibernate engine, which uses non-blocking I/O under the covers instead of JDBC.
+`quarkus-reactive-pg-client` is the reactive equivalent of `quarkus-jdbc-postgresql`. It provides a non-blocking PostgreSQL driver built on Vert.x. As its blocking counterpart, it's mandatory for Quarkus Data Hibernate to work.
+
+// TODO Luca this is a problem! We said that we can easily reuse the same model but we need to change the interface type to use reactive, and it's a shame If you want to try reactive you should be able to reuse the exact same model:
+// TODO Luca instead of changing the repository, make it create a different repository, and show later the problem with entity's lifecycle method.
 Then switch your entity to `PanacheEntity.Reactive` and your repository to `PanacheRepository.Reactive`.
 The only difference is that all operations now return `Uni<T>` instead of `T`:
 
 [source,java]
 ----
 @Entity
-public class Book extends WithId.AutoLong implements PanacheEntity.Reactive {
+public class Book extends WithId.AutoLong implements PanacheEntity.Reactive { // <1>
     public String title;
     public String isbn;
     public int price;
@@ -380,16 +412,20 @@ public class Book extends WithId.AutoLong implements PanacheEntity.Reactive {
 
     public interface Repo extends PanacheRepository.Reactive<Book, Long> {
         @Find
-        Uni<List<Book>> findByTitle(String title);
+        Uni<List<Book>> findByTitle(String title); // <2>
 
         @Query("where price < :maxPrice order by title")
         Uni<List<Book>> cheaperThan(int maxPrice);
     }
 }
 ----
+<1> `PanacheEntity.Reactive` switches the entity to reactive mode.
+<2> All operations now return `Uni<T>` instead of `T`. `Uni` is a Mutiny reactive type that represents a value that will be available in the future. Instead of blocking the thread while waiting for the database, the method returns immediately with a `Uni` that will emit the result when the query completes.
 
 Suppose our bookstore receives a stream of advertised books from a message queue, and we want to check which ones we don't already have in our catalog.
 Using Quarkus Messaging and the reactive repository, the entire pipeline stays non-blocking:
+
+// TODO make this example runnable with in memory testing
 
 [source,java]
 ----
@@ -399,22 +435,29 @@ public class BookSuggestionService {
     @Inject
     Book.Repo books;
 
-    @Incoming("advertised-books")
-    @Outgoing("suggestions")
+    @Incoming("advertised-books") // <1>
+    @Outgoing("suggestions") // <2>
     public Multi<String> suggestNewBooks(Multi<String> advertisedIsbns) {
         return advertisedIsbns
             .onItem().transformToUniAndMerge(isbn ->
-                books.findByTitle(isbn)
+                books.findByTitle(isbn) // <3>
                     .map(found -> found.isEmpty() ? isbn : null)
             )
             .select().whereNonNull();
     }
 }
 ----
+<1> `@Incoming` connects the method to a message channel named `advertised-books`. Messages arrive as a `Multi<String>` reactive stream of ISBNs.
+<2> `@Outgoing` sends the method's output to the `suggestions` channel. These are Quarkus Messaging annotations
+<3> For each ISBN, we check the database. If no book is found (`found.isEmpty()`), the ISBN is forwarded.
 
-The repository's `findByTitle(isbn)` returns a `Uni<List<Book>>` that composes directly into the reactive pipeline.
 The entity model, the repository methods, the queries — everything stays the same.
+
+^ This is not true
+
 For the full details on reactive sessions, stateless reactive, and combining blocking and reactive code, see the xref:quarkus-data-hibernate.adoc#_let_s_get_reactive[reference guide].
+
+// TODO now handle lifecycle
 
 == Going further
 
