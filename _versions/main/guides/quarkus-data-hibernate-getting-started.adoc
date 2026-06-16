@@ -7,7 +7,7 @@ https://github.com/quarkusio/quarkus/tree/main/docs/src/main/asciidoc
 include::_attributes.adoc[]
 :categories: data
 :summary: A step-by-step guide to database access in Quarkus
-:topics: data,hibernate-orm,panache,getting-started
+:topics: data,hibernate-orm,hibernate-reactive,panache,getting-started
 :extensions: io.quarkus:quarkus-data-hibernate
 :extension-status: experimental
 
