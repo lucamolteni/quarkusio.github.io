@@ -201,8 +201,8 @@ org.hibernate.exception.SQLGrammarException: JDBC exception executing SQL [ERROR
 
 Hint: Perhaps you meant to reference the column "book.price".
 
-Position: 26] [SELECT * FROM Book
-
+Position: 26] [
+SELECT id, title, isbn, price FROM Book
 WHERE proce < ?
 ----
 
@@ -217,7 +217,7 @@ You can fix the test by modifying the `BookService.java` file:
     public List<BookRecord> cheaperThan(int maxPrice) {
         // <1>
         return session.createNativeQuery("""
-                SELECT * FROM Book
+                SELECT id, title, isbn, price FROM Book
                 WHERE price < :maxPrice
                 """, BookRecord.class)
             .setParameter("maxPrice", maxPrice)
