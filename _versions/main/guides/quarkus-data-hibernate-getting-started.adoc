@@ -21,7 +21,11 @@ In this guide we'll walk you through how to do it the Quarkus way.
 
 == Prerequisites
 
-You need to have the quarkus cli tool installed. [Here the instructions on how to install it](https://quarkus.io/guides/cli-tooling)
+To follow this tutorial you need:
+
+- Java 17+ installed (check with `java -version`)
+- The Quarkus CLI installed (see the xref:cli-tooling.adoc[CLI guide] for instructions)
+- A container runtime (Docker, Podman, or similar) running, so that Quarkus Dev Services can start a PostgreSQL container for you automatically
 
 == Introduction
 
@@ -50,14 +54,14 @@ The second dependency, `quarkus-jdbc-postgresql`, is the JDBC driver that tells 
 
 That's all you need to start querying your database.
 
-Run now quarkus in a separate tab of your terminal with
+Now run Quarkus continuous testing in a separate tab of your terminal:
 
 [source,bash]
 ----
 quarkus test
 ----
 
-You don't need to restart quarkus testing, it'll run test continously after every change.
+You don't need to restart Quarkus testing, it will re-run tests continuously after every change.
 
 Now create an `import.sql` file in `src/main/resources/` to prepopulate your database, this will be useful for this tutorial:
 
@@ -88,7 +92,7 @@ TIP: JDBC connections are called "Data Sources" in Quarkus. In dev mode, if you 
 
 == Simple SQL query
 
-The simplest thing you can do to access your database is to write native SQL queries directly, create a file called in the package `org.acme` called `BookService`:
+The simplest thing you can do to access your database is to write native SQL queries directly. Create a file called `BookService.java` in the package `org.acme`:
 
 [source,java]
 ----
@@ -236,7 +240,7 @@ Writing SQL by hand makes sense for very simple scenarios, or when you need data
 We can have a faster development model with the help of the compiler and avoid all these problems by mapping our table to a Java class and defining a repository for it.
 We now introduce the concept of Entity, for now we might think of it as a Java class that maps to a Database Table.
 
-Create a file called in the package `org.acme` called `Book.java`:
+Create a file called `Book.java` in the package `org.acme`:
 
 [source,java]
 ----
@@ -283,7 +287,7 @@ Now that we have an entity, Hibernate will automatically generate the table for 
 Remove the `CREATE TABLE` statement from `import.sql` and just keep the `INSERT` statements to avoid weird behavior.
 ====
 
-The repository is an interface, so you might wonder who implement this. It's the Hibernate annotation processor, which is a key component in this solution.
+The repository is an interface, so you might wonder who implements it. It's the Hibernate annotation processor, which is a key component in this solution.
 During compilation, it reads your entity model and your repository interfaces, validates everything, and generates implementation classes under `target/generated-sources/annotations/`.
 These generated classes are compiled together with your entities and wired up automatically by Quarkus. They are also simple to read, in case you want to understand how it works internally.
 
@@ -347,12 +351,12 @@ public class BookRepositoryTest {
 }
 ----
 
-Now if you make the same kind of typo we had earlier the build fails, change the name of the title paramteters to:
+Now if you make the same kind of typo we had earlier, the build fails. Try changing the parameter name to:
 
 [source,java]
 ----
         @Find
-        List<Book> findByTitle(String ttle);
+        List<Book> findByTitle(String tilte);
 ----
 
 You should see a compilation error like:
@@ -475,7 +479,7 @@ We said that with a stateless session, every change you make to an entity requir
 A managed session works differently: you don't need to think about when the data is going to be persisted to the database. After having called `.persist()` on an entity object you assume that every change that you make to that object will be automatically propagated to the database.
 Hibernate keeps track of all the changes you make to your persisted objects and, when the transaction commits, executes the most efficient series of SQL operations it can.
 
-To slightly complicate our example Let's also add an author to our bookstore, linked to `Book` with a `@ManyToOne` association:
+To slightly complicate our example, let's also add an author to our bookstore, linked to `Book` with a `@ManyToOne` association:
 
 [source,java]
 ----
@@ -700,6 +704,17 @@ public class ReactiveBookRepositoryTest {
 <3> `UniAsserter` lets you chain reactive assertions without blocking. The lambda passed to `assertThat` returns a `Uni`, and the second lambda verifies the result.
 
 For the full details on reactive sessions, stateless reactive, and combining blocking and reactive code, see the xref:quarkus-data-hibernate.adoc#_let_s_get_reactive[reference guide].
+
+== What you have built
+
+In this guide you went from an empty project to a working database application:
+
+- You started with raw SQL queries using `StatelessSession` and saw that typos in SQL are only caught at runtime.
+- You introduced entities and repositories with compile-time validation via the Hibernate annotation processor.
+- You used `PanacheEntity.Stateless` for explicit insert/update/delete operations, then switched to `PanacheEntity.Managed` for automatic change tracking with cascading persistence.
+- You added a reactive repository that returns `Uni` instead of blocking, using the same entity model.
+
+Every step was verified with tests, so you can be confident the code works.
 
 == Going further
 
