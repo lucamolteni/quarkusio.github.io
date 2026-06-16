@@ -77,9 +77,11 @@ INSERT INTO Book (id, title, isbn, price) VALUES (2, 'Clean Code', '978-01323508
 INSERT INTO Book (id, title, isbn, price) VALUES (3, 'Domain-Driven Design', '978-0321125217', 55);
 INSERT INTO Book (id, title, isbn, price) VALUES (4, 'Refactoring', '978-0134757599', 50);
 INSERT INTO Book (id, title, isbn, price) VALUES (5, 'The Pragmatic Programmer', '978-0135957059', 42);
+ALTER SEQUENCE Book_SEQ RESTART WITH 6;
 ----
 
 This SQL script creates a `Book` table with four columns (`id`, `title`, `isbn`, `price`) and inserts five books into it.
+The `ALTER SEQUENCE` at the end ensures that Hibernate's ID generator starts after the imported IDs, avoiding conflicts when inserting new rows later.
 While developing, Quarkus imports this SQL file automatically at startup, so in this tutorial we have something to start with.
 
 TIP: JDBC connections are called "Data Sources" in Quarkus. In dev mode, if you don't configure a datasource, Quarkus will automatically start a PostgreSQL container for you via Dev Services. This means you can run `quarkus dev` and start coding without installing or configuring a database. See the xref:datasource.adoc[Datasource guide] for more details.
@@ -388,8 +390,8 @@ public class Book extends WithId.AutoLong implements PanacheEntity.Stateless { /
 ----
 <1> This is the new part: `implements PanacheEntity.Stateless` gives our `Book` class methods to create, delete or update books without the need to use specific methods in repositories.
 
-<2> The repository also changed to `PanacheRepository.Stateless<Book, Long>` to specify the .
-// TODO LUCA ^ verify the Long type parameter is really needed
+<2> The repository also changed to `PanacheRepository.Stateless<Book, Long>`.
+// TODO: PanacheRepository<Book> infers Long, but Stateless/Managed/Reactive all require <Book, Long> explicitly. We should add single-parameter overloads (defaulting to Long) for consistency.
 
 Now we can write a service that lets users contribute a new book:
 
@@ -594,6 +596,7 @@ This shows the philosophy we've been trying to introduce since the https://quark
 If you're already using reactive APIs in your application (Quarkus Messaging, reactive REST clients, Vert.x), you want your database access to compose naturally with them without blocking the event loop.
 Quarkus Data Hibernate lets you experiment with both blocking and reactive to see what works best for your case. The same entity model works unchanged with a reactive driver.
 
+// TODO: quarkus-hibernate-reactive should transitively include quarkus-hibernate-reactive-panache-common so the annotation processor can generate reactive repository implementations. Until that's fixed, users also need to add quarkus-hibernate-reactive-panache.
 First, add the reactive dependencies:
 
 [source,bash]
@@ -633,45 +636,68 @@ public class Book extends WithId.AutoLong implements PanacheEntity.Managed {
 ----
 <1> The blocking repository stays unchanged.
 <2> A new reactive repository for the same entity. Both repositories can coexist
-<3> The operations in the return `Uni<T>` instead of `T`. `Uni` is a Mutiny reactive type that represents a value that will be available in the future. Instead of blocking the thread, the method returns immediately and emits the result when the query completes.
+<3> The return type is `Uni<T>` instead of `T`. `Uni` is a Mutiny reactive type that represents a value that will be available in the future. Instead of blocking the thread, the method returns immediately and emits the result when the query completes.
 
-Suppose our bookstore receives a stream of advertised books from a message queue, and we want to check which ones we don't already have in our catalog.
-Using Quarkus Messaging and the reactive repository, the entire pipeline stays non-blocking:
+To test the reactive repository, you need `quarkus-test-vertx` which provides `@RunOnVertxContext` and `UniAsserter` for testing reactive code. Add it to your `pom.xml`:
+
+[source,xml]
+.pom.xml
+----
+<dependency>
+    <groupId>io.quarkus</groupId>
+    <artifactId>quarkus-test-vertx</artifactId>
+    <scope>test</scope>
+</dependency>
+----
+
+Now create `src/test/java/org/acme/ReactiveBookRepositoryTest.java`:
 
 [source,java]
 ----
-@ApplicationScoped
-public class BookSuggestionService {
+package org.acme;
+
+import io.quarkus.test.TestReactiveTransaction;
+import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.vertx.RunOnVertxContext;
+import io.quarkus.test.vertx.UniAsserter;
+import jakarta.inject.Inject;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+@QuarkusTest
+public class ReactiveBookRepositoryTest {
 
     @Inject
-    Book.ReactiveRepo books; // <1>
+    Book.ReactiveRepo reactiveBookRepo;
 
-    @Incoming("advertised-books") // <2>
-    @Outgoing("suggestions") // <3>
-    public Multi<String> suggestNewBooks(Multi<String> advertisedIsbns) {
-        return advertisedIsbns
-            .onItem().transformToUniAndMerge(isbn ->
-                books.findByTitle(isbn) // <4>
-                    .map(found -> found.isEmpty() ? isbn : null)
-            )
-            .select().whereNonNull();
+    @Test
+    @RunOnVertxContext // <1>
+    @TestReactiveTransaction // <2>
+    void shouldFindBookByTitleReactively(UniAsserter asserter) {
+        asserter.assertThat( // <3>
+            () -> reactiveBookRepo.findByTitle("Effective Java"),
+            books -> {
+                assertEquals(1, books.size());
+                assertEquals("Effective Java", books.getFirst().title);
+            }
+        );
+    }
+
+    @Test
+    @RunOnVertxContext
+    @TestReactiveTransaction
+    void shouldReturnEmptyListForUnknownTitleReactively(UniAsserter asserter) {
+        asserter.assertThat(
+            () -> reactiveBookRepo.findByTitle("Unknown Book"),
+            books -> assertTrue(books.isEmpty())
+        );
     }
 }
 ----
-<1> We inject `Book.ReactiveRepo` instead of `Book.Repo`.
-<2> `@Incoming` connects the method to a message channel named `advertised-books`. Messages arrive as a `Multi<String>` — a reactive stream of ISBNs.
-<3> `@Outgoing` sends the method's output to the `suggestions` channel. These are Quarkus Messaging annotations that work with Kafka, AMQP, or in-memory channels for testing.
-<4> For each ISBN, we check the database. If no book is found (`found.isEmpty()`), the ISBN is forwarded. The entire pipeline runs without blocking any thread.
-
-The entity hasn't changed, it still has `.insert()` that blocks the thread.
-If you also need to persist entities reactively, you could access the entity as a managed reactive entity and save it from there
-
-[source,java]
-----
- book.managedReactive().save()
-----
-
-You might notice we're not calling `book.persist()` like we did in the blocking version. That's because the entity's lifecycle methods (`persist()`, `delete()`) are tied to the entity's interface type. Since `Book` implements `PanacheEntity.Managed` (blocking), calling `book.persist()` would block. To persist reactively without changing the entity model, we use a repository `@Save` method instead.
+<1> `@RunOnVertxContext` ensures the test runs on the Vert.x event loop, which is required for reactive database access.
+<2> `@TestReactiveTransaction` opens a reactive session and transaction for the test, and rolls back at the end.
+<3> `UniAsserter` lets you chain reactive assertions without blocking. The lambda passed to `assertThat` returns a `Uni`, and the second lambda verifies the result.
 
 For the full details on reactive sessions, stateless reactive, and combining blocking and reactive code, see the xref:quarkus-data-hibernate.adoc#_let_s_get_reactive[reference guide].
 
