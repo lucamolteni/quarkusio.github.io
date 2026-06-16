@@ -47,6 +47,7 @@ quarkus extension add quarkus-jdbc-postgresql
 
 The first dependency, `quarkus-data-hibernate`, is the Quarkus extension that provides everything you need for database access.
 The second dependency, `quarkus-jdbc-postgresql`, is the JDBC driver that tells Quarkus how to talk to a PostgreSQL database. If you're using a different database (MySQL, MariaDB, H2, etc.), pick the corresponding `quarkus-jdbc-*` driver instead. Quarkus Data Hibernate cannot work without a JDBC driver.
+
 That's all you need to start querying your database.
 
 Run now quarkus in a separate tab of your terminal with
@@ -62,7 +63,6 @@ Now create an `import.sql` file in `src/main/resources/` to prepopulate your dat
 
 [source,bash]
 ----
-cat > src/main/resources/import.sql << 'EOF'
 CREATE TABLE IF NOT EXISTS Book (
     id BIGSERIAL PRIMARY KEY,
     title VARCHAR(255),
@@ -77,13 +77,12 @@ INSERT INTO Book (id, title, isbn, price) VALUES (2, 'Clean Code', '978-01323508
 INSERT INTO Book (id, title, isbn, price) VALUES (3, 'Domain-Driven Design', '978-0321125217', 55);
 INSERT INTO Book (id, title, isbn, price) VALUES (4, 'Refactoring', '978-0134757599', 50);
 INSERT INTO Book (id, title, isbn, price) VALUES (5, 'The Pragmatic Programmer', '978-0135957059', 42);
-EOF
 ----
 
 This SQL script creates a `Book` table with four columns (`id`, `title`, `isbn`, `price`) and inserts five books into it.
-While developing, Quarkus imports this SQL file automatically at startup when the database is empty, so you'll have data to query right away.
+While developing, Quarkus imports this SQL file automatically at startup, so in this tutorial we have something to start with.
 
-TIP: JDBC connection are called "Data Source" in Quarkus. In dev mode, if you don't configure a datasource, Quarkus will automatically start a PostgreSQL container for you via Dev Services. This means you can run `quarkus dev` and start coding without installing or configuring a database.
+TIP: JDBC connections are called "Data Sources" in Quarkus. In dev mode, if you don't configure a datasource, Quarkus will automatically start a PostgreSQL container for you via Dev Services. This means you can run `quarkus dev` and start coding without installing or configuring a database. See the xref:datasource.adoc[Datasource guide] for more details.
 
 == Simple SQL query
 
@@ -126,7 +125,7 @@ public class BookService {
     }
 }
 ----
-<1> `@ApplicationScoped` makes this class a CDI bean. Quarkus creates a single instance and manages its lifecycle for you. You can then inject it anywhere you need it.
+<1> `@ApplicationScoped` makes this class a CDI bean. Quarkus creates a single instance for this class and manages its lifecycle for you. You can then inject it anywhere you need it.
 <2> A Java record that maps to the columns returned by the SQL query. Each field name must match a column name in the result set.
 <3> `@Inject` asks Quarkus to provide a database session. A `StatelessSession` is the simplest entry point to Hibernate.
 <4> `createNativeQuery(...)` sends raw SQL to the database. The `:title` syntax is a named parameter, Hibernate will substitute the value you pass via `setParameter`.
@@ -202,8 +201,8 @@ org.hibernate.exception.SQLGrammarException: JDBC exception executing SQL [ERROR
 Hint: Perhaps you meant to reference the column "book.price".
 
 Position: 26] [
-SELECT id, title, isbn, price FROM Book
-WHERE proce < ?
+
+SELECT id, title, isbn, price FROM Book WHERE proce < ?
 ----
 
 This test will fail at runtime with a SQL error because the column `proce` doesn't exist.
@@ -226,11 +225,13 @@ You can fix the test by modifying the `BookService.java` file:
 ----
 <1> Change `proce` to `price` here
 
+and then all the tests will now pass.
+
 Writing SQL by hand makes sense for very simple scenarios, or when you need database-specific features such as window functions, recursive functions and similar advanced patterns.
 
 == Entities and repositories
 
-We can avoid all these problems by mapping our table to a Java class and defining a repository for it.
+We can have a faster development model with the help of the compiler and avoid all these problems by mapping our table to a Java class and defining a repository for it.
 We now introduce the concept of Entity, for now we might think of it as a Java class that maps to a Database Table.
 
 Create a file called in the package `org.acme` called `Book.java`:
@@ -265,14 +266,14 @@ public class Book extends WithId.AutoLong { // <2>
 <1> Tells Hibernate that this class maps to a database table. Hibernate will use the class name as the table name and the field names as column names.
 <2> Gives the entity a generated `Long` id field automatically.
 <3> These public fields map to columns in the `Book` table. Hibernate reads and writes these fields directly.
-<4> Defines a repository: a place to put all your query methods for `Book`. By nesting it inside the entity, the queries and the data they operate on live together. You can name this interface whatever you want — `Queries`, `Repo`, `BookQueries`, etc.
+<4> Defines a repository: a place to put all your query methods for `Book`. By nesting it inside the entity, the queries and the data they operate on live together. You can name this interface whatever you want: `Queries`, `Repo`, `BookQueries`, etc.
+<5> `@Find` tells Quarkus Data Hibernate to generate a query based on the method's parameter names. `findByTitle(String title)` becomes a query that matches the `title` field on `Book`. Parameters are inferred from the method signature.
+<6> `@Query` lets you write an HQL fragment when you need more control. It avoid the need to write `select b from Book`. The entity type is inferred from the return type `List<Book>`.
 
 [WARNING]
 ====
-Do not name your repository interface `Repository` — it conflicts with `jakarta.data.repository.Repository` and will cause the annotation processor to fail.
+Do not name your repository interface literally `Repository`, it conflicts with `jakarta.data.repository.Repository` and will cause the annotation processor to fail.
 ====
-<5> `@Find` tells Quarkus Data Hibernate to generate a query based on the method's parameter names. `findByTitle(String title)` becomes a query that matches the `title` field on `Book`. Parameters are inferred from the method signature.
-<6> `@Query` lets you write an HQL fragment when you need more control. It avoid the need to write `select b from Book`. The entity type is inferred from the return type `List<Book>`.
 
 [IMPORTANT]
 ====
@@ -344,14 +345,22 @@ public class BookRepositoryTest {
 }
 ----
 
-Notice that both `findByTitle` and `cheaperThan` now work — including the price query that was broken in the raw SQL version. The annotation processor validated the field names at compile time, so typos like `proce` are impossible.
+Now if you make the same kind of typo we had earlier the build fails, change the name of the title paramteters to:
 
-Now if you make the same kind of typo we had earlier, i.e. `findByTitle(String tilte)`, the build fails:
+[source,java]
+----
+        @Find
+        List<Book> findByTitle(String ttle);
+----
+
+You should see a compilation error like:
 
 [source]
 ----
 error: no matching field named 'tilte' in entity class 'org.acme.Book'
 ----
+
+Get the parameter back to the correct name so that we can proceed further.
 
 == Creating new entities
 
@@ -439,8 +448,8 @@ public class CrowdSourceServiceTest {
 [NOTE]
 ====
 If you're an experienced Hibernate user, you'll find this part very different to what you're used to.
-When you call `insert()`, `update()`, or `delete()`, an operation is triggered against the database.
-Managed entities are nowhere to be seen, and the idea of a detached object vs a persisted object is missing.
+When you call `insert()`, `update()`, or `delete()`, an operation is instantly triggered against the database, without calling `.flush()` explicitly.
+Managed entities are nowhere to be seen, and so is the idea of detached object and persisted object.
 This is intentional: it's a simpler model that uses `StatelessSession` under the covers.
 In this mode every change to an object requires an explicit save operation.
 If you're not interested in this style and want the full power of managed entities, skip ahead to <<managed-session>>.
@@ -461,8 +470,8 @@ See the xref:quarkus-data-hibernate.adoc#_about_entity_identifiers[reference gui
 == Managed session
 
 We said that with a stateless session, every change you make to an entity requires an explicit call to `insert()`, `update()`, or `delete()`.
-A managed session works differently: you don't need to think about when the data is going to be persisted to the database.
-Hibernate keeps track of all the changes you make to your objects and, when the transaction commits, executes the most efficient series of SQL operations it can.
+A managed session works differently: you don't need to think about when the data is going to be persisted to the database. After having called `.persist()` on an entity object you assume that every change that you make to that object will be automatically propagated to the database.
+Hibernate keeps track of all the changes you make to your persisted objects and, when the transaction commits, executes the most efficient series of SQL operations it can.
 
 To slightly complicate our example Let's also add an author to our bookstore, linked to `Book` with a `@ManyToOne` association:
 
@@ -497,7 +506,6 @@ public class Book extends WithId.AutoLong implements PanacheEntity.Managed { // 
 ----
 <1> `PanacheEntity.Managed` replaces `PanacheEntity.Stateless`. This tells Hibernate to track this entity in its internal stateful persistence context
 <2> `@ManyToOne` creates a relationship between `Book` and `Author`. The `cascade = CascadeType.PERSIST` means that when you persist a `Book`, Hibernate will automatically persist its `Author` too if it's new.
-// TODO Luca Persist is not needed probably!
 <3> The repository goes back to `PanacheRepository<Book>` (not `Stateless`) since we're now using managed sessions.
 
 Now we can persist a book with its author in a single call, Hibernate takes care of the ordering and persists both:
@@ -521,7 +529,7 @@ public class CrowdSourceService {
     }
 }
 ----
-<1> `persist()` (note that is different than: `insert()`) doesn't execute SQL immediately. It tells Hibernate "this object is new, make sure it'll persisted in the DB." Because `Book.author` has `cascade = CascadeType.PERSIST`, we don't need to persist the `Author` separately. Hibernate figures out that the author is new, inserts it first (to get its ID), then inserts the book with the correct foreign key.
+<1> `persist()` (note that is different than: `insert()`) doesn't execute SQL immediately. It tells Hibernate "this object is new, make sure it'll persist in the DB." Because `Book.author` has `cascade = CascadeType.PERSIST`, we don't need to persist the `Author` separately. Hibernate figures out that the author is new, inserts it first (to get its ID), then inserts the book with the correct foreign key.
 
 Let's update our test to verify that persisting a book also persists its author:
 
@@ -577,8 +585,8 @@ public void contributeNewBook(String title, String isbn, String authorName) {
 }
 ----
 
-This particular case is not incredibly less compac than the one before. IN the Stateless Session version we have to insert, one for entity, and in the managed we have a single persist at the end of it. More complicated cases (perhaps involving collections will show more explicit advantages)
-// Luca use a OneToMany example
+This particular case is not incredibly less compact than the one before. In the Stateless Session version we have to insert, one for entity, and in the managed we have a single persist at the end of it. More complicated cases (perhaps involving collections will show more explicit advantages)
+// TOD Luca use a OneToMany example perhaps? I don't like this managed session example.
 This shows the philosophy we've been trying to introduce since the https://quarkus.io/blog/introducing-quarkus-data/[blog post]: we want to make sure that simple things are easy, but more complex things are possible.
 
 == Reactive
@@ -588,24 +596,10 @@ Quarkus Data Hibernate lets you experiment with both blocking and reactive to se
 
 First, add the reactive dependencies:
 
-[source,xml,role="primary asciidoc-tabs-target-sync-cli asciidoc-tabs-target-sync-maven"]
-.pom.xml
+[source,bash]
 ----
-<dependency>
-    <groupId>io.quarkus</groupId>
-    <artifactId>quarkus-hibernate-reactive</artifactId>
-</dependency>
-<dependency>
-    <groupId>io.quarkus</groupId>
-    <artifactId>quarkus-reactive-pg-client</artifactId>
-</dependency>
-----
-
-[source,gradle,role="secondary asciidoc-tabs-target-sync-gradle"]
-.build.gradle
-----
-implementation("io.quarkus:quarkus-hibernate-reactive")
-implementation("io.quarkus:quarkus-reactive-pg-client")
+quarkus extension add quarkus-hibernate-reactive
+quarkus extension add quarkus-reactive-pg-client
 ----
 
 `quarkus-hibernate-reactive` adds the reactive Hibernate engine, which uses non-blocking I/O under the covers instead of JDBC.
