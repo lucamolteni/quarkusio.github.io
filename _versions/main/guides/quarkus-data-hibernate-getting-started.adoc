@@ -156,6 +156,8 @@ import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 @QuarkusTest // <1>
@@ -166,14 +168,14 @@ public class BookServiceTest {
 
     @Test
     void shouldFindBookByTitle() {
-        var books = bookService.findByTitle("Effective Java"); // <3>
+        List<BookService.BookRecord> books = bookService.findByTitle("Effective Java"); // <3>
         assertEquals(1, books.size());
         assertEquals("Effective Java", books.getFirst().title());
     }
 
     @Test
     void shouldReturnEmptyListForUnknownTitle() {
-        var books = bookService.findByTitle("Unknown Book");
+        List<BookService.BookRecord> books = bookService.findByTitle("Unknown Book");
         assertTrue(books.isEmpty());
     }
 }
@@ -193,7 +195,7 @@ Let's add a test for `cheaperThan` to our `BookServiceTest`:
 ----
 @Test
 void shouldFindCheaperBooks() {
-    var books = bookService.cheaperThan(45);
+    List<BookService.BookRecord> books = bookService.cheaperThan(45);
     assertEquals(2, books.size()); // Clean Code (40) and The Pragmatic Programmer (42)
 }
 ----
@@ -322,6 +324,8 @@ import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 @QuarkusTest
@@ -332,20 +336,20 @@ public class BookRepositoryTest {
 
     @Test
     void shouldFindBookByTitle() {
-        var books = bookRepo.findByTitle("Effective Java");
+        List<Book> books = bookRepo.findByTitle("Effective Java");
         assertEquals(1, books.size());
         assertEquals("Effective Java", books.getFirst().title);
     }
 
     @Test
     void shouldFindCheaperBooks() {
-        var books = bookRepo.cheaperThan(45);
+        List<Book> books = bookRepo.cheaperThan(45);
         assertEquals(2, books.size()); // Clean Code (40) and The Pragmatic Programmer (42)
     }
 
     @Test
     void shouldReturnEmptyListForUnknownTitle() {
-        var books = bookRepo.findByTitle("Unknown Book");
+        List<Book> books = bookRepo.findByTitle("Unknown Book");
         assertTrue(books.isEmpty());
     }
 }
