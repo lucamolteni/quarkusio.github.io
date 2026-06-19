@@ -287,7 +287,20 @@ Do not name your repository interface literally `Repository`, it conflicts with 
 [IMPORTANT]
 ====
 Now that we have an entity, Hibernate will automatically generate the table and sequence for us.
-Remove the `CREATE SEQUENCE`, `CREATE TABLE`, and `DELETE FROM` statements from `import.sql` and keep only the `INSERT` statements.
+Remove the `CREATE SEQUENCE`, `CREATE TABLE`, and `DELETE FROM` statements from `import.sql`, keep only the `INSERT` statements, and add `ALTER SEQUENCE Book_SEQ RESTART WITH 6;` at the end so that new IDs don't collide with the imported data.
+
+Your `import.sql` should now look like this:
+
+[source,sql]
+----
+INSERT INTO Book (id, title, isbn, price) VALUES (1, 'Effective Java', '978-0134685991', 45);
+INSERT INTO Book (id, title, isbn, price) VALUES (2, 'Clean Code', '978-0132350884', 40);
+INSERT INTO Book (id, title, isbn, price) VALUES (3, 'Domain-Driven Design', '978-0321125217', 55);
+INSERT INTO Book (id, title, isbn, price) VALUES (4, 'Refactoring', '978-0134757599', 50);
+INSERT INTO Book (id, title, isbn, price) VALUES (5, 'The Pragmatic Programmer', '978-0135957059', 42);
+
+ALTER SEQUENCE Book_SEQ RESTART WITH 6;
+----
 ====
 
 The repository is an interface, so you might wonder who implements it. It's the Hibernate annotation processor, which is a key component in this solution.
@@ -605,14 +618,16 @@ This shows the philosophy we've been trying to introduce since the https://quark
 If you're already using reactive APIs in your application (Quarkus Messaging, reactive REST clients, Vert.x), you want your database access to compose naturally with them without blocking the event loop.
 Quarkus Data Hibernate lets you experiment with both blocking and reactive to see what works best for your case. The same entity model works unchanged with a reactive driver.
 
-// TODO: quarkus-hibernate-reactive should transitively include quarkus-hibernate-reactive-panache-common so the annotation processor can generate reactive repository implementations. Until that's fixed, users also need to add quarkus-hibernate-reactive-panache.
 First, add the reactive dependencies:
 
 [source,bash]
 ----
 quarkus extension add quarkus-hibernate-reactive
+quarkus extension add quarkus-hibernate-reactive-panache
 quarkus extension add quarkus-reactive-pg-client
 ----
+
+NOTE: `quarkus-hibernate-reactive-panache` is needed because `quarkus-hibernate-reactive` does not yet transitively include the classes required by the annotation processor to generate reactive repository implementations (see https://github.com/quarkusio/quarkus/issues/54892[#54892]).
 
 `quarkus-hibernate-reactive` adds the reactive Hibernate engine, which uses non-blocking I/O under the covers instead of JDBC.
 `quarkus-reactive-pg-client` is the reactive equivalent of `quarkus-jdbc-postgresql`. It provides a non-blocking PostgreSQL driver built on Vert.x. As its blocking counterpart, it's mandatory for Quarkus Data Hibernate to work.
