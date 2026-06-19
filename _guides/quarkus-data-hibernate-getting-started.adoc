@@ -15,9 +15,8 @@ include::{includes}/extension-status.adoc[]
 
 == Overview
 
-You want database access: you want your application data to be persisted somewhere, you have an external database to query, and you're wondering where to start?
-In this guide we'll walk you through how to do it the Quarkus way.
-
+Database access is something almost every application needs, whether it's persisting data or querying tables.
+In this guide we start from scratch and build up a repository for an online bookstore, going from your first SQL query to compile-time validated repositories and reactive database access. By the end you'll have a solid understanding of how data access works in Quarkus.
 
 == Prerequisites
 
