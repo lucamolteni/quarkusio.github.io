@@ -541,16 +541,18 @@ public class SalesService {
                 modified.add(book); // <3>
             }
         }
+        // Other business logic that modifies books i.e. applying loyalty points, rounding prices ...
+        // Since we want to update them only once, we collect them to avoid multiple updates within the loops
         for (Book book : modified) {
             bookRepo.update(book); // <4>
         }
     }
 }
 ----
-<1> We need to keep track of which books we actually changed.
+<1> We collect the books we modify so we can update them all at the end, after all business logic has run. Updating inside the body will results in multiple SQL update statements.
 <2> In a stateless session, lazy associations are not fetched automatically. We must load the publisher explicitly. A join fetch query in the Book repository could be used instead of a separate fetch, but for the scope of the tutorial we're not introducing join fetches.
 <3> We add the book to our list of modified objects.
-<4> At the end, we must explicitly call `update()` on every book we changed. If we forget, the price change is silently lost.
+<4> We update once at the end, after all modifications are done.
 
 Notice how the persistence concerns, tracking which objects changed, fetching lazy associations, explicitly calling `update()`, are mixed in with the business logic. This method is beginning to become complex.
 
