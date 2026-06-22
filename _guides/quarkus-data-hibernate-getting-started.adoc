@@ -560,7 +560,7 @@ Now let's implement our discount service:
 [source,java]
 ----
 @ApplicationScoped
-public class BookstoreService {
+public class SalesService {
 
     @Inject
     Book.Repo bookRepo;
@@ -605,17 +605,17 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 @QuarkusTest
-public class BookstoreServiceTest {
+public class SalesServiceTest {
 
     @Inject
-    BookstoreService bookstoreService;
+    SalesService salesService;
 
     @Inject
     Book.Repo bookRepo;
 
     @Test
     void shouldApplySaleOnlyToPublishersThatAllowDiscounts() {
-        bookstoreService.applyCountrySale("US", 10);
+        salesService.applyCountrySale("US", 10);
 
         // Addison-Wesley (US, allows discounts): prices reduced by 10%
         assertEquals(41, bookRepo.findByTitle("Effective Java").getFirst().price); // was: 45
@@ -682,7 +682,7 @@ Now the service becomes pure business logic:
 [source,java]
 ----
 @ApplicationScoped
-public class BookstoreService {
+public class SalesService {
 
     @Inject
     Book.Repo bookRepo;
