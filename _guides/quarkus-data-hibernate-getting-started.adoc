@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS Book (
     id BIGINT PRIMARY KEY DEFAULT nextval('Book_SEQ'),
     title VARCHAR(255),
     isbn VARCHAR(20),
-    price INT, -- use NUMERIC in production
+    price NUMERIC(10,2),
     publisher_id BIGINT REFERENCES Publisher(id)
 );
 
@@ -117,14 +117,14 @@ INSERT INTO Publisher (id, name, country, allowsDiscounts) VALUES (2, 'Prentice 
 INSERT INTO Publisher (id, name, country, allowsDiscounts) VALUES (3, 'O''Reilly', 'UK', true);
 INSERT INTO Publisher (id, name, country, allowsDiscounts) VALUES (4, 'Manning', 'UK', false);
 
-INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (1, 'Effective Java', '978-0134685991', 45, 1);
-INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (2, 'Clean Code', '978-0132350884', 40, 1);
-INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (3, 'Domain-Driven Design', '978-0321125217', 55, 2);
-INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (4, 'Refactoring', '978-0134757599', 50, 2);
-INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (5, 'The Pragmatic Programmer', '978-0135957059', 42, 3);
-INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (6, 'Head First Design Patterns', '978-0596007126', 38, 3);
-INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (7, 'Java Concurrency in Practice', '978-0321349606', 48, 4);
-INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (8, 'Kotlin in Action', '978-1617293290', 44, 4);
+INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (1, 'Effective Java', '978-0134685991', 45.00, 1);
+INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (2, 'Clean Code', '978-0132350884', 40.00, 1);
+INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (3, 'Domain-Driven Design', '978-0321125217', 55.00, 2);
+INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (4, 'Refactoring', '978-0134757599', 50.00, 2);
+INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (5, 'The Pragmatic Programmer', '978-0135957059', 42.00, 3);
+INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (6, 'Head First Design Patterns', '978-0596007126', 38.00, 3);
+INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (7, 'Java Concurrency in Practice', '978-0321349606', 48.00, 4);
+INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (8, 'Kotlin in Action', '978-1617293290', 44.00, 4);
 ----
 
 This SQL script creates sequences for ID generation, the `Publisher` and `Book` tables, and inserts sample data.
@@ -154,17 +154,18 @@ package org.acme;
 
 import org.hibernate.annotations.processing.SQL;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 public interface BookQueries { // <1>
 
-    record BookRecord(Long id, String title, String isbn, int price) {} // <2>
+    record BookRecord(Long id, String title, String isbn, BigDecimal price) {} // <2>
 
     @SQL("SELECT id, title, isbn, price FROM Book WHERE title = :title") // <3> <4>
     List<BookRecord> findByTitle(String title); // <5>
 
     @SQL("SELECT id, title, isbn, price FROM Book WHERE proce < :maxPrice")
-    List<BookRecord> cheaperThan(int maxPrice);
+    List<BookRecord> cheaperThan(BigDecimal maxPrice);
 }
 ----
 <1> A repository interface that groups all your query methods for books. The annotation processor generates the implementation for you.
@@ -224,7 +225,7 @@ Let's add a test for `cheaperThan` to our `BookQueriesTest`:
 ----
 @Test
 void shouldFindCheaperBooks() {
-    List<BookQueries.BookRecord> books = bookQueries.cheaperThan(45);
+    List<BookQueries.BookRecord> books = bookQueries.cheaperThan(BigDecimal.valueOf(45));
     assertEquals(4, books.size()); // Clean Code (40), Head First Design Patterns (38), The Pragmatic Programmer (42), Kotlin in Action (44)
 }
 ----
@@ -251,7 +252,7 @@ You can fix the test by modifying the `BookQueries.java` file:
 [source,java]
 ----
     @SQL("SELECT id, title, isbn, price FROM Book WHERE price < :maxPrice") // <1>
-    List<BookRecord> cheaperThan(int maxPrice);
+    List<BookRecord> cheaperThan(BigDecimal maxPrice);
 ----
 <1> Change `proce` to `price` here
 
@@ -282,14 +283,14 @@ import java.util.List;
 public class Book extends WithId.AutoLong { // <2>
     public String title; // <3>
     public String isbn;
-    public int price;
+    public BigDecimal price;
 
     public interface Repo extends PanacheRepository<Book> { // <4>
         @Find
         List<Book> findByTitle(String title); // <5>
 
         @Query("where price < :maxPrice order by title")
-        List<Book> cheaperThan(int maxPrice); // <6>
+        List<Book> cheaperThan(BigDecimal maxPrice); // <6>
     }
 }
 ----
@@ -299,8 +300,6 @@ public class Book extends WithId.AutoLong { // <2>
 <4> Defines a repository: a place to put all your query methods for `Book`. By nesting it inside the entity, the queries and the data they operate on live together. You can name this interface whatever you want: `Queries`, `Repo`, `BookQueries`, etc.
 <5> `@Find` tells Quarkus Data Hibernate to generate a query based on the method's parameter names. `findByTitle(String title)` becomes a query that matches the `title` field on `Book`. Parameters are inferred from the method signature.
 <6> `@Query` lets you write an HQL fragment when you need more control. It avoids the need to write `select b from Book`. The entity type is inferred from the return type `List<Book>`.
-
-TIP: We use `int` for prices to keep the tutorial simple. In a real application, use `BigDecimal` to avoid rounding errors when dealing with money.
 
 Now let's write a test to check that the repository works. Create `src/test/java/org/acme/BookRepositoryTest.java`:
 
@@ -331,7 +330,7 @@ public class BookRepositoryTest {
 
     @Test
     void shouldFindCheaperBooks() {
-        List<Book> books = bookRepo.cheaperThan(45);
+        List<Book> books = bookRepo.cheaperThan(BigDecimal.valueOf(45));
         assertEquals(4, books.size()); // Clean Code (40), Head First Design Patterns (38), The Pragmatic Programmer (42), Kotlin in Action (44)
     }
 
@@ -373,14 +372,14 @@ Let's update `Book` to implement `PanacheEntity.Stateless`, which gives us lifec
 public class Book extends WithId.AutoLong implements PanacheEntity.Stateless { // <1>
     public String title;
     public String isbn;
-    public int price;
+    public BigDecimal price;
 
     public interface Repo extends PanacheRepository.Stateless<Book, Long> { // <2>
         @Find
         List<Book> findByTitle(String title);
 
         @Query("where price < :maxPrice order by title")
-        List<Book> cheaperThan(int maxPrice);
+        List<Book> cheaperThan(BigDecimal maxPrice);
     }
 }
 ----
@@ -397,11 +396,11 @@ Now we can write a service that lets users contribute a new book:
 public class CrowdSourceService {
 
     @Transactional // <1>
-    public void contributeNewBook(String title, String isbn) {
+    public void contributeNewBook(String title, String isbn, BigDecimal price) {
         Book book = new Book();
         book.title = title;
         book.isbn = isbn;
-        book.price = 0;
+        book.price = price;
         book.insert(); // <2>
     }
 }
@@ -434,11 +433,11 @@ public class CrowdSourceServiceTest {
 
     @Test
     void shouldInsertNewBook() {
-        crowdSourceService.contributeNewBook("New Book", "978-1111111111");
+        crowdSourceService.contributeNewBook("New Book", "978-1111111111", BigDecimal.valueOf(29.99));
         List<Book> books = bookRepo.findByTitle("New Book");
         assertEquals(1, books.size());
         assertEquals("978-1111111111", books.getFirst().isbn);
-        assertEquals(0, books.getFirst().price);
+        assertEquals(BigDecimal.valueOf(29.99), books.getFirst().price);
     }
 }
 ----
@@ -499,7 +498,7 @@ And add a `publisher` relationship to `Book`, plus a stateless repository and a 
 public class Book extends WithId.AutoLong implements PanacheEntity.Stateless {
     public String title;
     public String isbn;
-    public int price;
+    public BigDecimal price;
     @ManyToOne(fetch = FetchType.LAZY) // <1>
     public Publisher publisher;
 
@@ -508,7 +507,7 @@ public class Book extends WithId.AutoLong implements PanacheEntity.Stateless {
         List<Book> findByTitle(String title);
 
         @Query("where price < :maxPrice order by title")
-        List<Book> cheaperThan(int maxPrice);
+        List<Book> cheaperThan(BigDecimal maxPrice);
 
         @Query("where publisher.country = :country")
         List<Book> findByPublisherCountry(String country);
@@ -531,13 +530,14 @@ public class SalesService {
     Publisher.Repo publisherRepo;
 
     @Transactional
-    public void applyCountrySale(String country, int discountPercent) {
+    public void applyCountrySale(String country, BigDecimal discountPercent) {
         List<Book> books = bookRepo.findByPublisherCountry(country);
         List<Book> modified = new ArrayList<>(); // <1>
+        BigDecimal factor = BigDecimal.ONE.subtract(discountPercent.divide(BigDecimal.valueOf(100)));
         for (Book book : books) {
             Publisher publisher = publisherRepo.findById(book.publisher.id); // <2>
             if (publisher.allowsDiscounts) {
-                book.price -= book.price * discountPercent / 100;
+                book.price = book.price.multiply(factor).setScale(2, RoundingMode.HALF_UP);
                 modified.add(book); // <3>
             }
         }
@@ -549,7 +549,7 @@ public class SalesService {
     }
 }
 ----
-<1> We collect the books we modify so we can update them all at the end, after all business logic has run. Updating inside the body will results in multiple SQL update statements.
+<1> We collect the books we modify so we can update them all at the end, after all business logic has run. Updating inside the body will result in multiple SQL update statements.
 <2> In a stateless session, lazy associations are not fetched automatically. We must load the publisher explicitly. A join fetch query in the Book repository could be used instead of a separate fetch, but for the scope of the tutorial we're not introducing join fetches.
 <3> We add the book to our list of modified objects.
 <4> We update once at the end, after all modifications are done.
@@ -579,15 +579,15 @@ public class SalesServiceTest {
 
     @Test
     void shouldApplySaleOnlyToPublishersThatAllowDiscounts() {
-        salesService.applyCountrySale("US", 10);
+        salesService.applyCountrySale("US", BigDecimal.valueOf(10));
 
         // Addison-Wesley (US, allows discounts): prices reduced by 10%
-        assertEquals(41, bookRepo.findByTitle("Effective Java").getFirst().price); // was: 45
-        assertEquals(36, bookRepo.findByTitle("Clean Code").getFirst().price); // was: 40
+        assertEquals(new BigDecimal("40.50"), bookRepo.findByTitle("Effective Java").getFirst().price); // was: 45.00
+        assertEquals(new BigDecimal("36.00"), bookRepo.findByTitle("Clean Code").getFirst().price); // was: 40.00
 
         // Prentice Hall (US, no discounts): prices unchanged
-        assertEquals(55, bookRepo.findByTitle("Domain-Driven Design").getFirst().price);
-        assertEquals(50, bookRepo.findByTitle("Refactoring").getFirst().price);
+        assertEquals(new BigDecimal("55.00"), bookRepo.findByTitle("Domain-Driven Design").getFirst().price);
+        assertEquals(new BigDecimal("50.00"), bookRepo.findByTitle("Refactoring").getFirst().price);
     }
 }
 ----
@@ -603,7 +603,7 @@ Switch `Book` to use `PanacheEntity.Managed` and a managed repository:
 public class Book extends WithId.AutoLong implements PanacheEntity.Managed { // <1>
     public String title;
     public String isbn;
-    public int price;
+    public BigDecimal price;
     @ManyToOne(fetch = FetchType.LAZY)
     public Publisher publisher;
 
@@ -612,7 +612,7 @@ public class Book extends WithId.AutoLong implements PanacheEntity.Managed { // 
         List<Book> findByTitle(String title);
 
         @Query("where price < :maxPrice order by title")
-        List<Book> cheaperThan(int maxPrice);
+        List<Book> cheaperThan(BigDecimal maxPrice);
 
         @Query("where publisher.country = :country")
         List<Book> findByPublisherCountry(String country);
@@ -630,11 +630,11 @@ Since `Book` is now a managed entity, `insert()` is no longer available. Update 
 public class CrowdSourceService {
 
     @Transactional
-    public void contributeNewBook(String title, String isbn) {
+    public void contributeNewBook(String title, String isbn, BigDecimal price) {
         Book book = new Book();
         book.title = title;
         book.isbn = isbn;
-        book.price = 0;
+        book.price = price;
         book.persist(); // <1>
     }
 }
@@ -652,11 +652,12 @@ public class SalesService {
     Book.Repo bookRepo;
 
     @Transactional
-    public void applyCountrySale(String country, int discountPercent) {
+    public void applyCountrySale(String country, BigDecimal discountPercent) {
+        BigDecimal factor = BigDecimal.ONE.subtract(discountPercent.divide(BigDecimal.valueOf(100)));
         List<Book> books = bookRepo.findByPublisherCountry(country);
         for (Book book : books) {
             if (book.publisher.allowsDiscounts) { // <1>
-                book.price -= book.price * discountPercent / 100; // <2>
+                book.price = book.price.multiply(factor).setScale(2, RoundingMode.HALF_UP); // <2>
             }
         }
     } // <3>
@@ -696,7 +697,7 @@ Now let's change only the minimal part of the code you need to try reactive. Let
 public class Book extends WithId.AutoLong implements PanacheEntity.Managed {
     public String title;
     public String isbn;
-    public int price;
+    public BigDecimal price;
     @ManyToOne(fetch = FetchType.LAZY)
     public Publisher publisher;
 
@@ -705,7 +706,7 @@ public class Book extends WithId.AutoLong implements PanacheEntity.Managed {
         List<Book> findByTitle(String title);
 
         @Query("where price < :maxPrice order by title")
-        List<Book> cheaperThan(int maxPrice);
+        List<Book> cheaperThan(BigDecimal maxPrice);
 
         @Query("where publisher.country = :country")
         List<Book> findByPublisherCountry(String country);
@@ -788,7 +789,7 @@ For the full details on reactive sessions, stateless reactive, and combining blo
 
 In this guide you went from an empty project to a working database application:
 
-- You started with raw SQL queries using `StatelessSession` and saw that typos in SQL are only caught at runtime.
+- You started with raw SQL queries using `@SQL` and saw that typos in SQL are only caught at runtime.
 - You introduced entities and repositories with compile-time validation via the Hibernate annotation processor.
 - You used `PanacheEntity.Stateless` for explicit insert/update/delete operations and saw how persistence logic gets mixed in with business logic.
 - You switched to `PanacheEntity.Managed` for automatic dirty tracking and lazy loading, letting you write pure business logic while Hibernate handles the persistence.
