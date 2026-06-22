@@ -31,14 +31,14 @@ To follow this tutorial you need:
 You're working on a physical bookstore website, in which you want users to be able to browse books with titles.
 In this tutorial, we won't deal with the frontend and the user interface, we just want to connect to the database.
 
-We'll start this tutorial by creating a new empty quarkus application. The easiest way to do so is to have quarkus CLI tool available:
+We'll start this tutorial by creating a new empty Quarkus application. The easiest way to do so is to have the Quarkus CLI tool available:
 
 [source,bash]
 ----
 quarkus create app --name="Quarkus Data Tutorial" quarkus-data-tutorial --platform-bom=io.quarkus.platform:quarkus-bom:3.37.0.CR1
 ----
 
-Let's start by importing the extension:
+Let's start by importing the extensions:
 
 [source,bash]
 ----
@@ -62,7 +62,7 @@ quarkus test
 
 You don't need to restart Quarkus testing, it will re-run tests continuously after every change.
 
-Now create an `import.sql` file in `src/main/resources/` to prepopulate your database, this will be useful for this tutorial:
+Now create an `import.sql` file in `src/main/resources/` to prepopulate your database. This will be useful for this tutorial:
 
 [source,bash]
 ----
@@ -107,6 +107,16 @@ This SQL script creates sequences for ID generation, the `Publisher` and `Book` 
 Each book is linked to a publisher.
 The sequences start past the imported data so that new IDs don't collide.
 While developing, Quarkus imports this SQL file automatically at startup, so in this tutorial we have something to start with.
+
+Quarkus Data Hibernate can handle the database schema for you.
+Since our `import.sql` already handles the full schema creation, let's tell Hibernate not to manage it and tell Dev Services to run our script when the database container starts.
+Add this to `src/main/resources/application.properties`:
+
+[source,properties]
+----
+quarkus.hibernate-orm.schema-management.strategy=none
+quarkus.datasource.devservices.init-script-path=import.sql
+----
 
 TIP: JDBC connections are called "Data Sources" in Quarkus. In dev mode, if you don't configure a datasource, Quarkus will automatically start a PostgreSQL container for you via Dev Services. This means you can run `quarkus dev` and start coding without installing or configuring a database. See the xref:datasource.adoc[Datasource guide] for more details.
 
@@ -216,7 +226,7 @@ Let's add a test for `cheaperThan` to our `BookServiceTest`:
 @Test
 void shouldFindCheaperBooks() {
     List<BookService.BookRecord> books = bookService.cheaperThan(45);
-    assertEquals(2, books.size()); // Clean Code (40) and The Pragmatic Programmer (42)
+    assertEquals(4, books.size()); // Clean Code (40), Head First Design Patterns (38), The Pragmatic Programmer (42), Kotlin in Action (44)
 }
 ----
 
@@ -260,7 +270,7 @@ Writing SQL by hand makes sense for very simple scenarios, or when you need data
 == Entities and repositories
 
 We can have a faster development model with the help of the compiler and avoid all these problems by mapping our table to a Java class and defining a repository for it.
-We now introduce the concept of Entity, for now we might think of it as a Java class that maps to a Database Table.
+We now introduce the concept of an Entity: a Java class that maps to a database table.
 
 Create a file called `Book.java` in the package `org.acme`:
 
@@ -296,41 +306,13 @@ public class Book extends WithId.AutoLong { // <2>
 <3> These public fields map to columns in the `Book` table. Hibernate reads and writes these fields directly.
 <4> Defines a repository: a place to put all your query methods for `Book`. By nesting it inside the entity, the queries and the data they operate on live together. You can name this interface whatever you want: `Queries`, `Repo`, `BookQueries`, etc.
 <5> `@Find` tells Quarkus Data Hibernate to generate a query based on the method's parameter names. `findByTitle(String title)` becomes a query that matches the `title` field on `Book`. Parameters are inferred from the method signature.
-<6> `@Query` lets you write an HQL fragment when you need more control. It avoid the need to write `select b from Book`. The entity type is inferred from the return type `List<Book>`.
+<6> `@Query` lets you write an HQL fragment when you need more control. It avoids the need to write `select b from Book`. The entity type is inferred from the return type `List<Book>`.
 
 TIP: We use `int` for prices to keep the tutorial simple. In a real application, use `BigDecimal` to avoid rounding errors when dealing with money.
 
 [WARNING]
 ====
 Do not name your repository interface literally `Repository`, it conflicts with `jakarta.data.repository.Repository` and will cause the annotation processor to fail.
-====
-
-[IMPORTANT]
-====
-Now that we have an entity, Hibernate will automatically generate the table and sequence for us.
-Remove the `CREATE SEQUENCE`, `CREATE TABLE`, and `DELETE FROM` statements from `import.sql`, keep only the `INSERT` statements, and add `ALTER SEQUENCE` at the end so that new IDs don't collide with the imported data.
-
-Your `import.sql` should now look like this:
-
-[source,sql]
-----
-INSERT INTO Publisher (id, name, country, allowsDiscounts) VALUES (1, 'Addison-Wesley', 'US', true);
-INSERT INTO Publisher (id, name, country, allowsDiscounts) VALUES (2, 'Prentice Hall', 'US', false);
-INSERT INTO Publisher (id, name, country, allowsDiscounts) VALUES (3, 'O''Reilly', 'UK', true);
-INSERT INTO Publisher (id, name, country, allowsDiscounts) VALUES (4, 'Manning', 'UK', false);
-
-INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (1, 'Effective Java', '978-0134685991', 45, 1);
-INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (2, 'Clean Code', '978-0132350884', 40, 1);
-INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (3, 'Domain-Driven Design', '978-0321125217', 55, 2);
-INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (4, 'Refactoring', '978-0134757599', 50, 2);
-INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (5, 'The Pragmatic Programmer', '978-0135957059', 42, 3);
-INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (6, 'Head First Design Patterns', '978-0596007126', 38, 3);
-INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (7, 'Java Concurrency in Practice', '978-0321349606', 48, 4);
-INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (8, 'Kotlin in Action', '978-1617293290', 44, 4);
-
-ALTER SEQUENCE Book_SEQ RESTART WITH 9;
-ALTER SEQUENCE Publisher_SEQ RESTART WITH 5;
-----
 ====
 
 The repository is an interface, so you might wonder who implements it. It's the Hibernate annotation processor, which is a key component in this solution.
@@ -388,7 +370,7 @@ public class BookRepositoryTest {
     @Test
     void shouldFindCheaperBooks() {
         List<Book> books = bookRepo.cheaperThan(45);
-        assertEquals(2, books.size()); // Clean Code (40) and The Pragmatic Programmer (42)
+        assertEquals(4, books.size()); // Clean Code (40), Head First Design Patterns (38), The Pragmatic Programmer (42), Kotlin in Action (44)
     }
 
     @Test
@@ -421,7 +403,7 @@ Get the parameter back to the correct name so that we can proceed further.
 So far we've been reading data, but our bookstore is crowdsourced: users can add books they want to share.
 We need to persist new books to the database.
 
-Let's update our `Book` to extend `WithId.AutoLong` and implement `PanacheEntity.Stateless`, which gives us lifecycle operations directly on the entity:
+Let's update `Book` to implement `PanacheEntity.Stateless`, which gives us lifecycle operations directly on the entity:
 
 [source,java]
 ----
@@ -462,7 +444,7 @@ public class CrowdSourceService {
     }
 }
 ----
-<1> Wraps the method in a database transaction. This is required to define the scope of your operations, so that related operations might be committed or rollbacked together. This case is very simple.
+<1> Wraps the method in a database transaction. This is required to define the scope of your operations, so that related operations are committed or rolled back together.
 <2> `insert()` immediately executes an `INSERT` statement against the database.
 
 Let's write a test to verify that inserting a new book actually works. Create `src/test/java/org/acme/CrowdSourceServiceTest.java`:
@@ -501,9 +483,9 @@ public class CrowdSourceServiceTest {
 
 [NOTE]
 ====
-If you're an experienced Hibernate user, you'll find this part very different to what you're used to.
+If you're an experienced Hibernate user, you'll find this part very different from what you're used to.
 When you call `insert()`, `update()`, or `delete()`, an operation is instantly triggered against the database, without calling `.flush()` explicitly.
-Managed entities are nowhere to be seen, and so is the idea of detached object and persisted object.
+Managed entities are nowhere to be seen, and neither is the idea of detached and persisted objects.
 This is intentional: it's a simpler model that uses `StatelessSession` under the covers.
 In this mode every change to an object requires an explicit save operation.
 If you're not interested in this style and want the full power of managed entities, skip ahead to <<managed-session>>.
@@ -513,9 +495,9 @@ If you're not interested in this style and want the full power of managed entiti
 
 `WithId.AutoLong` is more powerful than Hibernate's traditional `@Id @GeneratedValue` pair: there are variants for different ID types out of the box:
 
-- `WithId.AutoLong` — a generated `Long` id
-- `WithId.AutoUUID` — a generated `UUID` id
-- `WithId.AutoString` — a generated `String` id
+- `WithId.AutoLong`, a generated `Long` id
+- `WithId.AutoUUID`, a generated `UUID` id
+- `WithId.AutoString`, a generated `String` id
 
 Of course you can always use `@Id` and `@GeneratedValue` directly if you prefer, or if you need a custom ID strategy.
 See the xref:quarkus-data-hibernate.adoc#_about_entity_identifiers[reference guide] for the full list of options.
@@ -608,7 +590,7 @@ public class BookstoreService {
 <3> We add the book to our list of modified objects.
 <4> At the end, we must explicitly call `update()` on every book we changed. If we forget, the price change is silently lost.
 
-Notice how the persistence concerns such as tracking which objects changed, fetching lazy associations, explicitly calling `update()`, are mixed in with the business logic. This method is beginning to become a bit complex.
+Notice how the persistence concerns, tracking which objects changed, fetching lazy associations, explicitly calling `update()`, are mixed in with the business logic. This method is beginning to become complex.
 
 Let's write a test to verify it works:
 
@@ -646,8 +628,8 @@ public class BookstoreServiceTest {
 }
 ----
 
-This works, but it can be written in a simpler way, with less code.
-Quarkus Data Hibernate supports a concept called "managed persistence context" that returns managed objects. Such context handles the persistence concerns for you: Hibernate tracks every entity it loads, detects which fields changed, and generates the best SQL needed to keep the entities synchronized with the database at commit time. You don't need to track dirty objects or associations, and lazy associations are fetched automatically when you access them.
+This works, but it can be simpler.
+Quarkus Data Hibernate supports a "managed persistence context" that tracks objects for you: Hibernate monitors every entity it loads, detects which fields changed, and generates the minimal SQL needed to keep entities synchronized with the database at commit time. You don't need to track dirty objects, and lazy associations are fetched automatically when you access them.
 
 Switch `Book` to use `PanacheEntity.Managed` and a managed repository:
 
@@ -676,6 +658,25 @@ public class Book extends WithId.AutoLong implements PanacheEntity.Managed { // 
 <1> `PanacheEntity.Managed` replaces `PanacheEntity.Stateless`. This tells Hibernate to track this entity in its persistence context.
 <2> The repository uses `PanacheRepository<Book>` instead of `PanacheRepository.Stateless`.
 
+Since `Book` is now a managed entity, `insert()` is no longer available. Update `CrowdSourceService` to use `persist()` instead:
+
+[source,java]
+----
+@ApplicationScoped
+public class CrowdSourceService {
+
+    @Transactional
+    public void contributeNewBook(String title, String isbn) {
+        Book book = new Book();
+        book.title = title;
+        book.isbn = isbn;
+        book.price = 0;
+        book.persist(); // <1>
+    }
+}
+----
+<1> `persist()` replaces `insert()`. Unlike `insert()`, it doesn't execute SQL immediately, Hibernate will flush the change when the transaction commits.
+
 Now the service becomes pure business logic:
 
 [source,java]
@@ -702,7 +703,7 @@ public class BookstoreService {
 <3> When the `@Transactional` method returns, Hibernate compares every managed entity against its original state and generates the correct SQL. Books whose publisher didn't allow discounts were never changed, so Hibernate skips them entirely.
 
 The test is exactly the same: the behavior hasn't changed, just the implementation got simpler.
-It's up to you to decide whether to use a Managed Entity or a Stateless one. The Managed Repository is more expressive, but reasoning about it is more complex and might require knowing some details about how Hibernate handles objects. If you're an experienced Hibernate developer, you probably already know the discussions about n+1 queries, and you expect that changing an object's field doesn't immediately show queries hitting the DB. Some users prefer a more explicit way to control the database. Either way is fine, and Quarkus Data Hibernate makes it easy to use both and to switch without committing to one style or the other.
+It's up to you to decide whether to use a Managed Entity or a Stateless one. The Managed Repository is more expressive, but reasoning about it is more complex and might require knowing some details about how Hibernate handles objects. If you're an experienced Hibernate developer, you probably already know the discussions about n+1 queries, and you expect that changing an object's field doesn't immediately hit the database. Some users prefer a more explicit way to control the database. Either way is fine, and Quarkus Data Hibernate makes it easy to use both and to switch without committing to one style or the other.
 
 == Reactive
 
@@ -753,7 +754,7 @@ public class Book extends WithId.AutoLong implements PanacheEntity.Managed {
 }
 ----
 <1> The blocking repository stays unchanged.
-<2> A new reactive repository for the same entity. Both repositories can coexist
+<2> A new reactive repository for the same entity. Both repositories can coexist.
 <3> The return type is `Uni<T>` instead of `T`. `Uni` is a Mutiny reactive type that represents a value that will be available in the future. Instead of blocking the thread, the method returns immediately and emits the result when the query completes.
 
 To test the reactive repository, you need `quarkus-test-vertx` which provides `@RunOnVertxContext` and `UniAsserter` for testing reactive code. Add it to your `pom.xml`:
@@ -835,5 +836,5 @@ Every step was verified with tests, so you can be confident the code works.
 
 Everything you've seen in this guide is built on top of https://jakarta.ee/specifications/data/[Jakarta Data] and https://jakarta.ee/specifications/persistence/[Jakarta Persistence].
 You can use these raw components directly for more advanced scenarios: for instance, you could define repositories as standalone interfaces outside of entities, and the annotation processor will still generate the query implementations for you.
-You can also inject the `Session` or `StatelessSession` at any time and do things manually, as you'd do with using the Hibernate ORM extension directly.
+You can also inject the `Session` or `StatelessSession` at any time and do things manually, as you would with the Hibernate ORM extension directly.
 The xref:quarkus-data-hibernate.adoc[reference guide] covers the full API surface.
