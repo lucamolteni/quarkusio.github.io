@@ -66,26 +66,46 @@ Now create an `import.sql` file in `src/main/resources/` to prepopulate your dat
 
 [source,bash]
 ----
-CREATE SEQUENCE IF NOT EXISTS Book_SEQ START WITH 6 INCREMENT BY 50;
+CREATE SEQUENCE IF NOT EXISTS Publisher_SEQ START WITH 5 INCREMENT BY 50;
+
+CREATE TABLE IF NOT EXISTS Publisher (
+    id BIGINT PRIMARY KEY DEFAULT nextval('Publisher_SEQ'),
+    name VARCHAR(255),
+    country VARCHAR(10),
+    allowsDiscounts BOOLEAN
+);
+
+CREATE SEQUENCE IF NOT EXISTS Book_SEQ START WITH 9 INCREMENT BY 50;
 
 CREATE TABLE IF NOT EXISTS Book (
     id BIGINT PRIMARY KEY DEFAULT nextval('Book_SEQ'),
     title VARCHAR(255),
     isbn VARCHAR(20),
-    price INT
+    price INT, -- use NUMERIC in production
+    publisher_id BIGINT REFERENCES Publisher(id)
 );
 
 DELETE FROM Book;
+DELETE FROM Publisher;
 
-INSERT INTO Book (id, title, isbn, price) VALUES (1, 'Effective Java', '978-0134685991', 45);
-INSERT INTO Book (id, title, isbn, price) VALUES (2, 'Clean Code', '978-0132350884', 40);
-INSERT INTO Book (id, title, isbn, price) VALUES (3, 'Domain-Driven Design', '978-0321125217', 55);
-INSERT INTO Book (id, title, isbn, price) VALUES (4, 'Refactoring', '978-0134757599', 50);
-INSERT INTO Book (id, title, isbn, price) VALUES (5, 'The Pragmatic Programmer', '978-0135957059', 42);
+INSERT INTO Publisher (id, name, country, allowsDiscounts) VALUES (1, 'Addison-Wesley', 'US', true);
+INSERT INTO Publisher (id, name, country, allowsDiscounts) VALUES (2, 'Prentice Hall', 'US', false);
+INSERT INTO Publisher (id, name, country, allowsDiscounts) VALUES (3, 'O''Reilly', 'UK', true);
+INSERT INTO Publisher (id, name, country, allowsDiscounts) VALUES (4, 'Manning', 'UK', false);
+
+INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (1, 'Effective Java', '978-0134685991', 45, 1);
+INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (2, 'Clean Code', '978-0132350884', 40, 1);
+INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (3, 'Domain-Driven Design', '978-0321125217', 55, 2);
+INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (4, 'Refactoring', '978-0134757599', 50, 2);
+INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (5, 'The Pragmatic Programmer', '978-0135957059', 42, 3);
+INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (6, 'Head First Design Patterns', '978-0596007126', 38, 3);
+INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (7, 'Java Concurrency in Practice', '978-0321349606', 48, 4);
+INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (8, 'Kotlin in Action', '978-1617293290', 44, 4);
 ----
 
-This SQL script creates a sequence for ID generation, the `Book` table, and inserts five books.
-The sequence starts at 6 so that new IDs don't collide with the imported data.
+This SQL script creates sequences for ID generation, the `Publisher` and `Book` tables, and inserts sample data.
+Each book is linked to a publisher.
+The sequences start past the imported data so that new IDs don't collide.
 While developing, Quarkus imports this SQL file automatically at startup, so in this tutorial we have something to start with.
 
 TIP: JDBC connections are called "Data Sources" in Quarkus. In dev mode, if you don't configure a datasource, Quarkus will automatically start a PostgreSQL container for you via Dev Services. This means you can run `quarkus dev` and start coding without installing or configuring a database. See the xref:datasource.adoc[Datasource guide] for more details.
@@ -278,6 +298,8 @@ public class Book extends WithId.AutoLong { // <2>
 <5> `@Find` tells Quarkus Data Hibernate to generate a query based on the method's parameter names. `findByTitle(String title)` becomes a query that matches the `title` field on `Book`. Parameters are inferred from the method signature.
 <6> `@Query` lets you write an HQL fragment when you need more control. It avoid the need to write `select b from Book`. The entity type is inferred from the return type `List<Book>`.
 
+TIP: We use `int` for prices to keep the tutorial simple. In a real application, use `BigDecimal` to avoid rounding errors when dealing with money.
+
 [WARNING]
 ====
 Do not name your repository interface literally `Repository`, it conflicts with `jakarta.data.repository.Repository` and will cause the annotation processor to fail.
@@ -286,19 +308,28 @@ Do not name your repository interface literally `Repository`, it conflicts with 
 [IMPORTANT]
 ====
 Now that we have an entity, Hibernate will automatically generate the table and sequence for us.
-Remove the `CREATE SEQUENCE`, `CREATE TABLE`, and `DELETE FROM` statements from `import.sql`, keep only the `INSERT` statements, and add `ALTER SEQUENCE Book_SEQ RESTART WITH 6;` at the end so that new IDs don't collide with the imported data.
+Remove the `CREATE SEQUENCE`, `CREATE TABLE`, and `DELETE FROM` statements from `import.sql`, keep only the `INSERT` statements, and add `ALTER SEQUENCE` at the end so that new IDs don't collide with the imported data.
 
 Your `import.sql` should now look like this:
 
 [source,sql]
 ----
-INSERT INTO Book (id, title, isbn, price) VALUES (1, 'Effective Java', '978-0134685991', 45);
-INSERT INTO Book (id, title, isbn, price) VALUES (2, 'Clean Code', '978-0132350884', 40);
-INSERT INTO Book (id, title, isbn, price) VALUES (3, 'Domain-Driven Design', '978-0321125217', 55);
-INSERT INTO Book (id, title, isbn, price) VALUES (4, 'Refactoring', '978-0134757599', 50);
-INSERT INTO Book (id, title, isbn, price) VALUES (5, 'The Pragmatic Programmer', '978-0135957059', 42);
+INSERT INTO Publisher (id, name, country, allowsDiscounts) VALUES (1, 'Addison-Wesley', 'US', true);
+INSERT INTO Publisher (id, name, country, allowsDiscounts) VALUES (2, 'Prentice Hall', 'US', false);
+INSERT INTO Publisher (id, name, country, allowsDiscounts) VALUES (3, 'O''Reilly', 'UK', true);
+INSERT INTO Publisher (id, name, country, allowsDiscounts) VALUES (4, 'Manning', 'UK', false);
 
-ALTER SEQUENCE Book_SEQ RESTART WITH 6;
+INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (1, 'Effective Java', '978-0134685991', 45, 1);
+INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (2, 'Clean Code', '978-0132350884', 40, 1);
+INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (3, 'Domain-Driven Design', '978-0321125217', 55, 2);
+INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (4, 'Refactoring', '978-0134757599', 50, 2);
+INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (5, 'The Pragmatic Programmer', '978-0135957059', 42, 3);
+INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (6, 'Head First Design Patterns', '978-0596007126', 38, 3);
+INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (7, 'Java Concurrency in Practice', '978-0321349606', 48, 4);
+INSERT INTO Book (id, title, isbn, price, publisher_id) VALUES (8, 'Kotlin in Action', '978-1617293290', 44, 4);
+
+ALTER SEQUENCE Book_SEQ RESTART WITH 9;
+ALTER SEQUENCE Publisher_SEQ RESTART WITH 5;
 ----
 ====
 
@@ -492,69 +523,94 @@ See the xref:quarkus-data-hibernate.adoc#_about_entity_identifiers[reference gui
 [[managed-session]]
 == Managed session
 
-We said that with a stateless session, every change you make to an entity requires an explicit call to `insert()`, `update()`, or `delete()`.
-A managed session works differently: you don't need to think about when the data is going to be persisted to the database. After having called `.persist()` on an entity object you assume that every change that you make to that object will be automatically propagated to the database.
-Hibernate keeps track of all the changes you make to your persisted objects and, when the transaction commits, executes the most efficient series of SQL operations it can.
+In our bookstore we want to run a promotional sale: apply a discount to all books in a given country, but only if the publisher allows it.
+Some publishers offer discounts, others don't.
 
-To slightly complicate our example, let's also add an author to our bookstore, linked to `Book` with a `@ManyToOne` association:
+Our database already has publishers (we set them up in `import.sql`), but we haven't mapped them as entities yet. Let's do that now. Create `Publisher.java`:
 
 [source,java]
 ----
+package org.acme;
+
+import io.quarkus.hibernate.panache.PanacheRepository;
+import io.quarkus.hibernate.panache.WithId;
+import jakarta.persistence.Entity;
+
 @Entity
-public class Author extends WithId.AutoLong {
+public class Publisher extends WithId.AutoLong {
     public String name;
+    public String country;
+    public boolean allowsDiscounts;
+
+    public interface Repo extends PanacheRepository.Stateless<Publisher, Long> {
+    }
 }
 ----
 
-Now to switch to a managed session, implement `PanacheEntity.Managed` instead of `PanacheEntity.Stateless`.
+And add a `publisher` relationship to `Book`, plus a stateless repository and a query to find books by publisher country:
 
 [source,java]
 ----
 @Entity
-public class Book extends WithId.AutoLong implements PanacheEntity.Managed { // <1>
+public class Book extends WithId.AutoLong implements PanacheEntity.Stateless {
     public String title;
     public String isbn;
     public int price;
-    @ManyToOne(cascade = CascadeType.PERSIST) // <2>
-    public Author author;
+    @ManyToOne(fetch = FetchType.LAZY) // <1>
+    public Publisher publisher;
 
-    public interface Repo extends PanacheRepository<Book> { // <3>
+    public interface Repo extends PanacheRepository.Stateless<Book, Long> {
         @Find
         List<Book> findByTitle(String title);
 
         @Query("where price < :maxPrice order by title")
         List<Book> cheaperThan(int maxPrice);
+
+        @Query("where publisher.country = :country")
+        List<Book> findByPublisherCountry(String country);
     }
 }
 ----
-<1> `PanacheEntity.Managed` replaces `PanacheEntity.Stateless`. This tells Hibernate to track this entity in its internal stateful persistence context
-<2> `@ManyToOne` creates a relationship between `Book` and `Author`. The `cascade = CascadeType.PERSIST` means that when you persist a `Book`, Hibernate will automatically persist its `Author` too if it's new.
-<3> The repository goes back to `PanacheRepository<Book>` (not `Stateless`) since we're now using managed sessions.
+<1> We use `FetchType.LAZY` so that loading a book doesn't automatically join and fetch its publisher.
 
-Now we can persist a book with its author in a single call, Hibernate takes care of the ordering and persists both:
+Now let's implement our discount service:
 
 [source,java]
 ----
 @ApplicationScoped
-public class CrowdSourceService {
+public class BookstoreService {
+
+    @Inject
+    Book.Repo bookRepo;
+
+    @Inject
+    Publisher.Repo publisherRepo;
 
     @Transactional
-    public void contributeNewBook(String title, String isbn, String authorName) {
-        Author author = new Author();
-        author.name = authorName;
-
-        Book book = new Book();
-        book.title = title;
-        book.isbn = isbn;
-        book.price = 0;
-        book.author = author;
-        book.persist(); // <1>
+    public void applyCountrySale(String country, int discountPercent) {
+        List<Book> books = bookRepo.findByPublisherCountry(country);
+        List<Book> modified = new ArrayList<>(); // <1>
+        for (Book book : books) {
+            Publisher publisher = publisherRepo.findById(book.publisher.id); // <2>
+            if (publisher.allowsDiscounts) {
+                book.price -= book.price * discountPercent / 100;
+                modified.add(book); // <3>
+            }
+        }
+        for (Book book : modified) {
+            bookRepo.update(book); // <4>
+        }
     }
 }
 ----
-<1> `persist()` (note that is different than: `insert()`) doesn't execute SQL immediately. It tells Hibernate "this object is new, make sure it'll persist in the DB." Because `Book.author` has `cascade = CascadeType.PERSIST`, we don't need to persist the `Author` separately. Hibernate figures out that the author is new, inserts it first (to get its ID), then inserts the book with the correct foreign key.
+<1> We need to keep track of which books we actually changed.
+<2> In a stateless session, lazy associations are not fetched automatically. We must load the publisher explicitly. A join fetch query in the Book repository could be used instead of a separate fetch, but for the scope of the tutorial we're not introducing join fetches.
+<3> We add the book to our list of modified objects.
+<4> At the end, we must explicitly call `update()` on every book we changed. If we forget, the price change is silently lost.
 
-Let's update our test to verify that persisting a book also persists its author:
+Notice how the persistence concerns such as tracking which objects changed, fetching lazy associations, explicitly calling `update()`, are mixed in with the business logic. This method is beginning to become a bit complex.
+
+Let's write a test to verify it works:
 
 [source,java]
 ----
@@ -564,53 +620,89 @@ import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.*;
 
 @QuarkusTest
-public class CrowdSourceServiceTest {
+public class BookstoreServiceTest {
 
     @Inject
-    CrowdSourceService crowdSourceService;
+    BookstoreService bookstoreService;
 
     @Inject
     Book.Repo bookRepo;
 
     @Test
-    void shouldPersistNewBookWithAuthor() {
-        crowdSourceService.contributeNewBook("New Book", "978-1111111111", "Jane Doe");
-        List<Book> books = bookRepo.findByTitle("New Book");
-        assertEquals(1, books.size());
-        assertEquals("978-1111111111", books.getFirst().isbn);
-        assertNotNull(books.getFirst().author);
-        assertEquals("Jane Doe", books.getFirst().author.name);
+    void shouldApplySaleOnlyToPublishersThatAllowDiscounts() {
+        bookstoreService.applyCountrySale("US", 10);
+
+        // Addison-Wesley (US, allows discounts): prices reduced by 10%
+        assertEquals(41, bookRepo.findByTitle("Effective Java").getFirst().price); // was: 45
+        assertEquals(36, bookRepo.findByTitle("Clean Code").getFirst().price); // was: 40
+
+        // Prentice Hall (US, no discounts): prices unchanged
+        assertEquals(55, bookRepo.findByTitle("Domain-Driven Design").getFirst().price);
+        assertEquals(50, bookRepo.findByTitle("Refactoring").getFirst().price);
     }
 }
 ----
 
-Compare it to what this would have been with a stateless session instead:
+This works, but it can be written in a simpler way, with less code.
+Quarkus Data Hibernate supports a concept called "managed persistence context" that returns managed objects. Such context handles the persistence concerns for you: Hibernate tracks every entity it loads, detects which fields changed, and generates the best SQL needed to keep the entities synchronized with the database at commit time. You don't need to track dirty objects or associations, and lazy associations are fetched automatically when you access them.
+
+Switch `Book` to use `PanacheEntity.Managed` and a managed repository:
 
 [source,java]
 ----
-@Transactional
-public void contributeNewBook(String title, String isbn, String authorName) {
-    Author author = new Author();
-    author.name = authorName;
-    author.insert();
+@Entity
+public class Book extends WithId.AutoLong implements PanacheEntity.Managed { // <1>
+    public String title;
+    public String isbn;
+    public int price;
+    @ManyToOne(fetch = FetchType.LAZY)
+    public Publisher publisher;
 
-    Book book = new Book();
-    book.title = title;
-    book.isbn = isbn;
-    book.price = 0;
-    book.author = author;
-    book.insert();
+    public interface Repo extends PanacheRepository<Book> { // <2>
+        @Find
+        List<Book> findByTitle(String title);
+
+        @Query("where price < :maxPrice order by title")
+        List<Book> cheaperThan(int maxPrice);
+
+        @Query("where publisher.country = :country")
+        List<Book> findByPublisherCountry(String country);
+    }
 }
 ----
+<1> `PanacheEntity.Managed` replaces `PanacheEntity.Stateless`. This tells Hibernate to track this entity in its persistence context.
+<2> The repository uses `PanacheRepository<Book>` instead of `PanacheRepository.Stateless`.
 
-This particular case is not incredibly less compact than the one before. In the Stateless Session version we have to insert, one for entity, and in the managed we have a single persist at the end of it. More complicated cases (perhaps involving collections will show more explicit advantages)
-// TOD Luca use a OneToMany example perhaps? I don't like this managed session example.
-This shows the philosophy we've been trying to introduce since the https://quarkus.io/blog/introducing-quarkus-data/[blog post]: we want to make sure that simple things are easy, but more complex things are possible.
+Now the service becomes pure business logic:
+
+[source,java]
+----
+@ApplicationScoped
+public class BookstoreService {
+
+    @Inject
+    Book.Repo bookRepo;
+
+    @Transactional
+    public void applyCountrySale(String country, int discountPercent) {
+        List<Book> books = bookRepo.findByPublisherCountry(country);
+        for (Book book : books) {
+            if (book.publisher.allowsDiscounts) { // <1>
+                book.price -= book.price * discountPercent / 100; // <2>
+            }
+        }
+    } // <3>
+}
+----
+<1> Accessing `book.publisher` triggers a lazy fetch: Hibernate loads the publisher from the database automatically with a query.
+<2> We just set the field. No need to call `update()`.
+<3> When the `@Transactional` method returns, Hibernate compares every managed entity against its original state and generates the correct SQL. Books whose publisher didn't allow discounts were never changed, so Hibernate skips them entirely.
+
+The test is exactly the same: the behavior hasn't changed, just the implementation got simpler.
+It's up to you to decide whether to use a Managed Entity or a Stateless one. The Managed Repository is more expressive, but reasoning about it is more complex and might require knowing some details about how Hibernate handles objects. If you're an experienced Hibernate developer, you probably already know the discussions about n+1 queries, and you expect that changing an object's field doesn't immediately show queries hitting the DB. Some users prefer a more explicit way to control the database. Either way is fine, and Quarkus Data Hibernate makes it easy to use both and to switch without committing to one style or the other.
 
 == Reactive
 
@@ -640,8 +732,8 @@ public class Book extends WithId.AutoLong implements PanacheEntity.Managed {
     public String title;
     public String isbn;
     public int price;
-    @ManyToOne(cascade = CascadeType.PERSIST)
-    public Author author;
+    @ManyToOne(fetch = FetchType.LAZY)
+    public Publisher publisher;
 
     public interface Repo extends PanacheRepository<Book> { // <1>
         @Find
@@ -649,6 +741,9 @@ public class Book extends WithId.AutoLong implements PanacheEntity.Managed {
 
         @Query("where price < :maxPrice order by title")
         List<Book> cheaperThan(int maxPrice);
+
+        @Query("where publisher.country = :country")
+        List<Book> findByPublisherCountry(String country);
     }
 
     public interface ReactiveRepo extends PanacheRepository.Reactive<Book, Long> { // <2>
@@ -730,7 +825,8 @@ In this guide you went from an empty project to a working database application:
 
 - You started with raw SQL queries using `StatelessSession` and saw that typos in SQL are only caught at runtime.
 - You introduced entities and repositories with compile-time validation via the Hibernate annotation processor.
-- You used `PanacheEntity.Stateless` for explicit insert/update/delete operations, then switched to `PanacheEntity.Managed` for automatic change tracking with cascading persistence.
+- You used `PanacheEntity.Stateless` for explicit insert/update/delete operations and saw how persistence logic gets mixed in with business logic.
+- You switched to `PanacheEntity.Managed` for automatic dirty tracking and lazy loading, letting you write pure business logic while Hibernate handles the persistence.
 - You added a reactive repository that returns `Uni` instead of blocking, using the same entity model.
 
 Every step was verified with tests, so you can be confident the code works.
@@ -739,5 +835,5 @@ Every step was verified with tests, so you can be confident the code works.
 
 Everything you've seen in this guide is built on top of https://jakarta.ee/specifications/data/[Jakarta Data] and https://jakarta.ee/specifications/persistence/[Jakarta Persistence].
 You can use these raw components directly for more advanced scenarios: for instance, you could define repositories as standalone interfaces outside of entities, and the annotation processor will still generate the query implementations for you.
-You can also inject the `Session` or `StatelessSession` at any time and do things manually, Hibernate style — as we did in the very first example of this guide.
+You can also inject the `Session` or `StatelessSession` at any time and do things manually, as you'd do with using the Hibernate ORM extension directly.
 The xref:quarkus-data-hibernate.adoc[reference guide] covers the full API surface.
